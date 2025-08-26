@@ -5,3 +5,4 @@ edition= "2021"
 
 [dependencies]
 wgpu-bootstrap= {git = "https://github.com/qlurkin/wgpu-bootstrap", tag = "v0.4.2"}
+bytemuck= {version= "1.18", features= ["derive"]}
