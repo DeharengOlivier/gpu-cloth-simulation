@@ -11,3 +11,10 @@ fn main() {
     // GPU application, so this file stays small:
     //
     // 1. Window creation (winit)
+    // 2. WebGPU/wgpu initialization (device, queue, surface)
+    // 3. The main render/update loop
+    // 4. Event handling (mouse, keyboard, resize)
+    // 5. egui integration (the parameter UI)
+    // 6. Timing (delta_time, FPS)
+
+    let mut runner = Runner::new(
