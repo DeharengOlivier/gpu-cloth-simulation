@@ -18,3 +18,10 @@ fn main() {
     // 6. Timing (delta_time, FPS)
 
     let mut runner = Runner::new(
+        "GPU Cloth Simulation",
+
+        // Initial window width in pixels.
+        900,
+
+        // Initial window height in pixels.
+        700,
