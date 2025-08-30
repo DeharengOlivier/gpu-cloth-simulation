@@ -25,3 +25,10 @@ fn main() {
 
         // Initial window height in pixels.
         700,
+
+        // egui background color (light grey). Affects the UI only, not the 3D scene.
+        egui::Color32::from_rgb(245, 245, 245),
+
+        // MSAA sample count (anti-aliasing). Higher = smoother edges but more cost.
+        32,
+
