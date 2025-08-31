@@ -39,3 +39,9 @@ fn main() {
         // Context (device, queue, surface format) and stores the resulting app in
         // an Arc (thread-safe shared pointer).
         Box::new(|context| Arc::new(InstanceApp::new(context))),
+    );
+
+    // Enter the render loop. This does not return until the window is closed; it
+    // repeatedly calls update() -> render() -> render_gui().
+    runner.run();
+}
