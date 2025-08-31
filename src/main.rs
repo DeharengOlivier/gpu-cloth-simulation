@@ -32,3 +32,10 @@ fn main() {
         // MSAA sample count (anti-aliasing). Higher = smoother edges but more cost.
         32,
 
+        // Present mode (0 = VSync, 1 = immediate). VSync caps to the display refresh rate.
+        0,
+
+        // App factory closure: the Runner calls it once at startup with the GPU
+        // Context (device, queue, surface format) and stores the resulting app in
+        // an Arc (thread-safe shared pointer).
+        Box::new(|context| Arc::new(InstanceApp::new(context))),
