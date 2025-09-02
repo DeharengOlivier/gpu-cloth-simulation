@@ -22,3 +22,11 @@ struct Instance {
 
 
 
+// Geometry of a single mesh vertex (shared by the cloth particles and the sphere).
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+    @location(2) color: vec3<f32>,
+};
+
+// Per-instance data: the simulated position of one cloth particle, used to
