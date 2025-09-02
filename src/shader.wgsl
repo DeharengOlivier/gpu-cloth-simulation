@@ -14,3 +14,11 @@ struct Instance {
 // Bind group 0 holds the camera uniform (shared by both render pipelines).
 // `instances` is declared for completeness but the simulated positions are
 // fed through the instance vertex buffer (see InstanceInput below), so this
+// storage binding is currently unused by the vertex stage.
+@group(0) @binding(0) var<uniform> camera: CameraUniform;
+@group(1) @binding(1) var<storage> instances: array<Instance>;
+
+
+
+
+
