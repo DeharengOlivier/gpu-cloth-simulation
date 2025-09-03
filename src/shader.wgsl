@@ -30,3 +30,8 @@ struct VertexInput {
 };
 
 // Per-instance data: the simulated position of one cloth particle, used to
+// translate the shared mesh geometry to where that particle currently is.
+struct InstanceInput {
+    @location(3) pos: vec3<f32>,
+};
+
