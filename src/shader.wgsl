@@ -48,3 +48,8 @@ fn vs_main(
     var out: VertexOutput;
     out.color = model.color;
     // Place the mesh at the particle's simulated position, then project to clip space.
+    out.clip_position = camera.proj * camera.view * vec4<f32>(model.position + instance.pos, 1.0);
+    return out;
+}
+
+// Cloth grid fragment shader: emit the flat per-vertex color unchanged.
