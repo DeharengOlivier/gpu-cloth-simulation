@@ -40,3 +40,11 @@ struct VertexOutput {
     @location(0) color: vec3<f32>,
 };
 
+@vertex
+fn vs_main(
+    model: VertexInput,
+    instance: InstanceInput,
+) -> VertexOutput {
+    var out: VertexOutput;
+    out.color = model.color;
+    // Place the mesh at the particle's simulated position, then project to clip space.
