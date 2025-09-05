@@ -53,3 +53,11 @@ fn vs_main(
 }
 
 // Cloth grid fragment shader: emit the flat per-vertex color unchanged.
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    return vec4<f32>(in.color, 1.0);
+}
+
+
+
+// Sphere rendering: unlike the cloth, the sphere carries a normal so the
