@@ -61,3 +61,10 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 
 // Sphere rendering: unlike the cloth, the sphere carries a normal so the
+// fragment stage can apply simple diffuse shading.
+struct SphereVertexOutput {
+    @builtin(position) clip_position: vec4<f32>,
+    @location(0) color: vec3<f32>,
+    @location(1) normal: vec3<f32>,
+};
+
