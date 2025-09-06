@@ -76,3 +76,6 @@ fn sphere_vs_main(model: VertexInput) -> SphereVertexOutput {
     out.normal = (camera.view * vec4<f32>(model.normal, 0.0)).xyz;
     out.clip_position = camera.proj * camera.view * vec4<f32>(model.position, 1.0);
     return out;
+}
+
+@fragment
