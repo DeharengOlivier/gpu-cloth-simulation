@@ -68,3 +68,11 @@ struct SphereVertexOutput {
     @location(1) normal: vec3<f32>,
 };
 
+@vertex
+fn sphere_vs_main(model: VertexInput) -> SphereVertexOutput {
+    var out: SphereVertexOutput;
+    out.color = model.color;
+    // Transform the normal into view space for lighting (w = 0 drops translation).
+    out.normal = (camera.view * vec4<f32>(model.normal, 0.0)).xyz;
+    out.clip_position = camera.proj * camera.view * vec4<f32>(model.position, 1.0);
+    return out;
