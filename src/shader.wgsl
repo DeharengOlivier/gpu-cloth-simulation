@@ -79,3 +79,10 @@ fn sphere_vs_main(model: VertexInput) -> SphereVertexOutput {
 }
 
 @fragment
+fn sphere_fs_main(in: SphereVertexOutput) -> @location(0) vec4<f32> {
+    // Single directional light, with a 0.3 ambient term so back faces are not pure black.
+    let light_dir = normalize(vec3<f32>(1.0, 1.0, 1.0));
+    let diffuse = max(dot(normalize(in.normal), light_dir), 0.0);
+    let final_color = in.color * (diffuse * 0.7 + 0.3);
+    return vec4<f32>(final_color, 1.0);
+}
