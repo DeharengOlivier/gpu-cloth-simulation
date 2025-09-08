@@ -15,3 +15,14 @@ struct TimeUniform {
 // Simulation parameters shared by every invocation. Field ORDER must match the
 // host-side PhysicsParams struct, because the host/GPU mapping is by byte
 // offset, not by name (bytemuck, #[repr(C)]).
+struct PhysicsParams {
+    structural_k: f32,
+    shear_k: f32,
+    bend_k: f32,
+    damping: f32,
+    mass: f32,
+    rest_length: f32,
+    dt: f32,
+    friction: f32,
+    sphere_radius: f32,
+};
