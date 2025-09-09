@@ -26,3 +26,7 @@ struct PhysicsParams {
     friction: f32,
     sphere_radius: f32,
 };
+
+// Bind group 0 for the compute pass. instances_ping is read, instances_pong is
+// written (ping-pong scheme: the host swaps which physical buffer is bound here
+// after every step, so this frame's output becomes next frame's input).
