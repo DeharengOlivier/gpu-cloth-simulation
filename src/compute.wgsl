@@ -30,3 +30,13 @@ struct PhysicsParams {
 // Bind group 0 for the compute pass. instances_ping is read, instances_pong is
 // written (ping-pong scheme: the host swaps which physical buffer is bound here
 // after every step, so this frame's output becomes next frame's input).
+@group(0) @binding(0) var<storage, read_write> instances_ping: array<Instance>;
+@group(0) @binding(1) var<storage, read_write> instances_pong: array<Instance>;
+@group(0) @binding(2) var<uniform> time: TimeUniform;
+@group(0) @binding(3) var<uniform> physics: PhysicsParams;
+
+
+
+
+
+// Downward gravity acceleration and the y-coordinate of the ground plane.
