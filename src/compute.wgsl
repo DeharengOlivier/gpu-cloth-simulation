@@ -44,3 +44,9 @@ const GRAVITY: f32 = -0.3;      // -0.5 also works; lower magnitude = slower fal
 const GROUND: f32 = -1.0;
 // Precomputed sqrt(2): diagonal (shear) springs have a rest length of
 // rest_length * sqrt(2) because the diagonal of a unit grid cell is sqrt(2).
+const sqrt_of_two: f32 = 1.41421356237309504880168872420969807856967187537694807317667973799073247846210703885038753432764157273501384623;
+
+// Hooke's law spring with velocity damping: F = -k * (length - rest_length) along
+// the spring axis, plus a damping term proportional to the relative velocity along
+// that same axis. Damping bleeds off energy so the cloth settles instead of
+// oscillating forever. Returns the force exerted on pos1 by the spring to pos2.
