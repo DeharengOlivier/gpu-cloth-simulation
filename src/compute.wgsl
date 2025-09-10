@@ -40,3 +40,7 @@ struct PhysicsParams {
 
 
 // Downward gravity acceleration and the y-coordinate of the ground plane.
+const GRAVITY: f32 = -0.3;      // -0.5 also works; lower magnitude = slower fall
+const GROUND: f32 = -1.0;
+// Precomputed sqrt(2): diagonal (shear) springs have a rest length of
+// rest_length * sqrt(2) because the diagonal of a unit grid cell is sqrt(2).
