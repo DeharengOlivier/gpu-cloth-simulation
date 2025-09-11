@@ -61,3 +61,14 @@ fn calculate_spring_force(pos1: vec3<f32>, pos2: vec3<f32>, vel1: vec3<f32>, vel
     }
 
     let direction = delta / current_length;
+
+    // Elastic restoring force.
+    let spring_force = k * (current_length - rest_length) * direction;
+    // Damping force (F = -c * v projected on the spring axis) to suppress oscillation.
+    let damping_force = damping * dot(velocity_delta, direction) * direction;
+
+    return spring_force + damping_force;
+}
+
+
+// Positional (Jakobsen-style) constraint: if a spring is stretched beyond
