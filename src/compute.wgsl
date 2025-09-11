@@ -50,3 +50,14 @@ const sqrt_of_two: f32 = 1.41421356237309504880168872420969807856967187537694807
 // the spring axis, plus a damping term proportional to the relative velocity along
 // that same axis. Damping bleeds off energy so the cloth settles instead of
 // oscillating forever. Returns the force exerted on pos1 by the spring to pos2.
+fn calculate_spring_force(pos1: vec3<f32>, pos2: vec3<f32>, vel1: vec3<f32>, vel2: vec3<f32>, rest_length: f32, k: f32,  damping: f32) -> vec3<f32> {
+    let delta = pos2 - pos1;
+    let velocity_delta = vel2 - vel1;
+    let current_length = length(delta);
+
+    // Guard against division by zero when two particles coincide.
+    if (current_length < 0.0001) {
+        return vec3<f32>(0.0);
+    }
+
+    let direction = delta / current_length;
