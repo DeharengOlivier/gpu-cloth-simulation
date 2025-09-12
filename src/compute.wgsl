@@ -72,3 +72,14 @@ fn calculate_spring_force(pos1: vec3<f32>, pos2: vec3<f32>, vel1: vec3<f32>, vel
 
 
 // Positional (Jakobsen-style) constraint: if a spring is stretched beyond
+// rest_length * max_stretch, push both endpoints back along the axis (half the
+// correction each). This is a hard cap applied after integration to stop the
+// cloth from exploding when forces are large relative to the time step.
+fn enforce_distance_constraint(pos1: ptr<function, vec3<f32>>, pos2: ptr<function, vec3<f32>>, rest_length: f32, max_stretch: f32) {
+    let delta = *pos2 - *pos1;
+    let current_length = length(delta);
+
+    if current_length > rest_length * max_stretch {
+        let correction = delta * (1.0 - (rest_length * max_stretch) / current_length);
+        *pos1 += correction * 0.5;
+        *pos2 -= correction * 0.5;
