@@ -83,3 +83,14 @@ fn enforce_distance_constraint(pos1: ptr<function, vec3<f32>>, pos2: ptr<functio
         let correction = delta * (1.0 - (rest_length * max_stretch) / current_length);
         *pos1 += correction * 0.5;
         *pos2 -= correction * 0.5;
+    }
+}
+
+
+
+
+
+
+// Main physics step. One invocation per particle: gather spring forces from its
+// grid neighbours, add gravity/damping, resolve collisions, integrate, then apply
+// the distance constraints. Reads from instances_ping, writes to instances_pong.
