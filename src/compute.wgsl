@@ -105,3 +105,12 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Recover the particle's (row, col) in the NxN grid. The grid is square, so
     // its side length is sqrt(total particle count).
     let grid_size = u32(sqrt(f32(arrayLength(&instances_ping))));
+    let row = index / grid_size;
+    let col = index % grid_size;
+
+    // Current world-space state of this particle, plus the force accumulator.
+    let pos = instance.position.xyz;
+    let speed = instance.speed.xyz;
+    var total_force = vec3<f32>(0.0, 0.0, 0.0);
+
+
