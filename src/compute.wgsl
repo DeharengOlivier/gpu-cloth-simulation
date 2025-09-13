@@ -94,3 +94,14 @@ fn enforce_distance_constraint(pos1: ptr<function, vec3<f32>>, pos2: ptr<functio
 // Main physics step. One invocation per particle: gather spring forces from its
 // grid neighbours, add gravity/damping, resolve collisions, integrate, then apply
 // the distance constraints. Reads from instances_ping, writes to instances_pong.
+@compute @workgroup_size(WORKGROUP_SIZE)
+fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let index = global_id.x;
+    var instance = instances_ping[index];
+
+    // Maximum allowed stretch factor for the distance constraint (see end of function).
+    let max_stretch = 100.0; // Allow 10% stretch
+
+    // Recover the particle's (row, col) in the NxN grid. The grid is square, so
+    // its side length is sqrt(total particle count).
+    let grid_size = u32(sqrt(f32(arrayLength(&instances_ping))));
