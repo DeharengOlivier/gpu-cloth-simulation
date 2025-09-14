@@ -114,3 +114,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     var total_force = vec3<f32>(0.0, 0.0, 0.0);
 
 
+    // --- Spring forces (Hooke's law) ---
+    // Structural springs connect each particle to its 4 direct neighbours
+    // (left, right, up, down). Boundary checks skip neighbours off the grid edge.
+    // Left neighbour
+    if (col > 0) {
+        let left_index = index - 1;
+        let left_pos = instances_ping[left_index].position.xyz;
+        let left_speed = instances_ping[left_index].speed.xyz;
+        total_force += calculate_spring_force(pos, left_pos, speed, left_speed, physics.rest_length, physics.structural_k, physics.damping);  
+    }
+
