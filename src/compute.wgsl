@@ -125,3 +125,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, left_pos, speed, left_speed, physics.rest_length, physics.structural_k, physics.damping);  
     }
 
+    // Right neighbour
+    if (col < grid_size - 1) {
+        let right_index = index + 1;
+        let right_pos = instances_ping[right_index].position.xyz;
+        let right_speed = instances_ping[right_index].speed.xyz;
+        total_force += calculate_spring_force(pos, right_pos, speed, right_speed, physics.rest_length, physics.structural_k, physics.damping);
+    }
+
+    // Top neighbour
+    if (row > 0) {
+        let up_index = index - grid_size;
