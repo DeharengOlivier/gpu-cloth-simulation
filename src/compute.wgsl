@@ -136,3 +136,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Top neighbour
     if (row > 0) {
         let up_index = index - grid_size;
+        let up_pos = instances_ping[up_index].position.xyz;
+        let up_speed = instances_ping[up_index].speed.xyz;
+        total_force += calculate_spring_force(pos, up_pos, speed, up_speed, physics.rest_length, physics.structural_k, physics.damping);
+    }
+
+    // Bottom neighbour
+    if (row < grid_size - 1) {
+        let down_index = index + grid_size;
+        let down_pos = instances_ping[down_index].position.xyz;
+        let down_speed = instances_ping[down_index].speed.xyz;
+        total_force += calculate_spring_force(pos, down_pos, speed, down_speed, physics.rest_length, physics.structural_k, physics.damping);
