@@ -147,3 +147,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let down_pos = instances_ping[down_index].position.xyz;
         let down_speed = instances_ping[down_index].speed.xyz;
         total_force += calculate_spring_force(pos, down_pos, speed, down_speed, physics.rest_length, physics.structural_k, physics.damping);
+    }
+
+
+    // Shear springs connect each particle to its 4 diagonal neighbours and resist
+    // in-plane shearing. Their rest length is rest_length * sqrt(2) (the cell diagonal).
+    // Top-left diagonal
+    if (row > 0 && col > 0) {
+        let diag_index = index - grid_size - 1;
+        let diag_pos = instances_ping[diag_index].position.xyz;
+        let diag_speed = instances_ping[diag_index].speed.xyz;
+        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
