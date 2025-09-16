@@ -158,3 +158,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let diag_pos = instances_ping[diag_index].position.xyz;
         let diag_speed = instances_ping[diag_index].speed.xyz;
         total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
+    }
+
+    // Top-right diagonal
+    if (row > 0 && col < grid_size - 1) {
+        let diag_index = index - grid_size + 1;
+        let diag_pos = instances_ping[diag_index].position.xyz;
+        let diag_speed = instances_ping[diag_index].speed.xyz;
+        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
+    }
+
+    // Bottom-left diagonal
