@@ -191,3 +191,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     if (col > 1) {
         let bend_index = index - 2;
         let bend_pos = instances_ping[bend_index].position.xyz;
+        let bend_speed = instances_ping[bend_index].speed.xyz;
+        total_force += calculate_spring_force(pos, bend_pos, speed, bend_speed, physics.rest_length * 2.0, physics.bend_k, physics.damping);
+    }
+
+    // Two cells to the right
+    if (col < grid_size - 2) {
+        let bend_index = index + 2;
+        let bend_pos = instances_ping[bend_index].position.xyz;
+        let bend_speed = instances_ping[bend_index].speed.xyz;
+        total_force += calculate_spring_force(pos, bend_pos, speed, bend_speed, physics.rest_length * 2.0, physics.bend_k, physics.damping);
+    }
