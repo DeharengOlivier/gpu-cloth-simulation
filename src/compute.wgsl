@@ -224,3 +224,9 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     // Global velocity damping (air drag): bleeds energy out of the whole system.
     let damping_force = -physics.damping * instance.speed.xyz;
+    total_force += damping_force;
+
+    // Gravity (weight = mass * g, applied on the y axis).
+    total_force += vec3<f32>(0.0, GRAVITY * physics.mass, 0.0);
+
+
