@@ -241,3 +241,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         // Snap the particle back onto the sphere surface along the outward normal.
         instance.position.x = normal.x * radius;
+        instance.position.y = normal.y * radius;
+        instance.position.z = normal.z * radius;
+
+
+        // Coulomb friction: Ff = -min(|F_t|, cf * |F_n|) * t_hat, where F is split
+        // into normal (F_n) and tangential (F_t) components relative to the surface.
+        let Ro = total_force;
+        let In = normal;
+
+        // Normal component of the accumulated force.
+        let Ro_n_magnitude = dot(Ro, In);
