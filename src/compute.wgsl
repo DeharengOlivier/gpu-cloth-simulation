@@ -230,3 +230,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     total_force += vec3<f32>(0.0, GRAVITY * physics.mass, 0.0);
 
 
+    // --- Collision with the central sphere (centred at the origin) ---
+    // If the particle is inside the sphere, project it back onto the surface and
+    // apply Coulomb friction tangent to the surface.
+    let distance = length(instance.position.xyz);
+    let radius = physics.sphere_radius;
+
+    if (distance < radius) {
+        let normal = normalize(instance.position.xyz);
+
+        // Snap the particle back onto the sphere surface along the outward normal.
+        instance.position.x = normal.x * radius;
