@@ -252,3 +252,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         // Normal component of the accumulated force.
         let Ro_n_magnitude = dot(Ro, In);
+        let Ro_n = In * Ro_n_magnitude;
+
+        // Tangential component (what friction opposes).
+        let Ro_t = Ro - Ro_n;
+        let Ro_t_magnitude = length(Ro_t);
+
+        // Only apply friction when there is a non-negligible tangential force.
+        if (Ro_t_magnitude > 0.0001) {
+            let It = Ro_t / Ro_t_magnitude;
+
+            // Friction coefficient (kept local; not driven by PhysicsParams.friction yet).
