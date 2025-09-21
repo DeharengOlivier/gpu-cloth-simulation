@@ -263,3 +263,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
             let It = Ro_t / Ro_t_magnitude;
 
             // Friction coefficient (kept local; not driven by PhysicsParams.friction yet).
+            let cf = 0.9;
+
+            // Friction force opposes the tangential motion, capped by cf * |F_n|.
+            let friction_magnitude = min(Ro_t_magnitude, cf * abs(Ro_n_magnitude));
+            let friction_force = -friction_magnitude * It;
+
+            total_force += friction_force;
+        }
+
+        // Reflect the velocity about the surface normal and damp it (inelastic bounce).
+        let damping = 0.5;
