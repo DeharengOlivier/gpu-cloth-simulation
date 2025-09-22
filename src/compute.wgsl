@@ -274,3 +274,12 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         // Reflect the velocity about the surface normal and damp it (inelastic bounce).
         let damping = 0.5;
+        let dot_product = dot(instance.speed.xyz, normal);
+        instance.speed.x = (instance.speed.x - 2.0 * dot_product * normal.x) * damping;
+        instance.speed.y = (instance.speed.y - 2.0 * dot_product * normal.y) * damping;
+        instance.speed.z = (instance.speed.z - 2.0 * dot_product * normal.z) * damping;
+    }
+
+
+
+
