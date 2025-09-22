@@ -283,3 +283,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
 
 
+    // --- Ground collision ---
+    // Clamp the particle to the ground plane and damp its downward velocity.
+    if (instance.position.y < GROUND) {
+        instance.position.y = GROUND;
+        let ground_damping = 0.2;
+        instance.speed.y = -instance.speed.y * ground_damping;
+    }
+
+    // Semi-implicit (symplectic) Euler integration: update velocity from the net
+    // force, then advance position using the new velocity.
+    let acceleration = total_force / physics.mass;
