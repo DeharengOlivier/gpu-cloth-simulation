@@ -294,3 +294,12 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Semi-implicit (symplectic) Euler integration: update velocity from the net
     // force, then advance position using the new velocity.
     let acceleration = total_force / physics.mass;
+    instance.speed.x += acceleration.x * physics.dt;
+    instance.speed.y += acceleration.y * physics.dt;
+    instance.speed.z += acceleration.z * physics.dt;
+
+    // Position update.
+    instance.position.x += instance.speed.x * physics.dt;
+    instance.position.y += instance.speed.y * physics.dt;
+    instance.position.z += instance.speed.z * physics.dt;
+
