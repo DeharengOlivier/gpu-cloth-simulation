@@ -303,3 +303,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     instance.position.y += instance.speed.y * physics.dt;
     instance.position.z += instance.speed.z * physics.dt;
 
+    // --- Distance constraints with neighbours ---
+    // After integration, hard-cap how far each spring may stretch. NOTE: pos2 is
+    // read from instances_ping (this frame's input) and the correction to pos2 is
+    // discarded; only this particle's position (pos1) is written back.
+    // Left neighbour
+    if (col > 0) {
+        var pos1 = instance.position.xyz;
+        var pos2 = instances_ping[index - 1].position.xyz;
+        enforce_distance_constraint(&pos1, &pos2, physics.rest_length, max_stretch);
+        instance.position.x = pos1.x;
+        instance.position.y = pos1.y;
