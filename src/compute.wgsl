@@ -347,3 +347,14 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Top-left diagonal neighbour
     if (row > 0 && col > 0) {
         var pos1 = instance.position.xyz;
+        var pos2 = instances_ping[index - grid_size - 1].position.xyz;
+        enforce_distance_constraint(&pos1, &pos2, physics.rest_length * sqrt_of_two, max_stretch);
+        instance.position.x = pos1.x;
+        instance.position.y = pos1.y;
+        instance.position.z = pos1.z;
+    }
+    // Top-right diagonal neighbour
+    if (row > 0 && col < grid_size - 1) {
+        var pos1 = instance.position.xyz;
+        var pos2 = instances_ping[index - grid_size + 1].position.xyz;
+        enforce_distance_constraint(&pos1, &pos2, physics.rest_length * sqrt_of_two, max_stretch);
