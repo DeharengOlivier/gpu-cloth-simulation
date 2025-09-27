@@ -380,3 +380,8 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         instance.position.y = pos1.y;
         instance.position.z = pos1.z;
     }
+
+
+    // Write the updated state into the output buffer for this step.
+    instances_pong[index] = instance;
+}
