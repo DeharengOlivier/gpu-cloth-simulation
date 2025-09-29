@@ -13,3 +13,7 @@ use wgpu_bootstrap::{
     wgpu::{self, util::DeviceExt}, // WebGPU API
     App, Context,                  // Framework trait and context type
 };
+use std::time::{Duration, Instant}; // Timing for the physics loop
+
+// ============================================================================
+// GPU DATA STRUCTURES
