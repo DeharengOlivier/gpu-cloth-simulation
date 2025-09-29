@@ -17,3 +17,10 @@ use std::time::{Duration, Instant}; // Timing for the physics loop
 
 // ============================================================================
 // GPU DATA STRUCTURES
+// ============================================================================
+
+/// One mesh vertex.
+///
+/// #[repr(C)] gives a stable, C-compatible memory layout so the CPU and GPU
+/// agree on field placement. bytemuck::Pod / Zeroable allow reinterpreting the
+/// struct as raw bytes for upload to a GPU buffer.
