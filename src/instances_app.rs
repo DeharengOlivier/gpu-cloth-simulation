@@ -24,3 +24,11 @@ use std::time::{Duration, Instant}; // Timing for the physics loop
 /// #[repr(C)] gives a stable, C-compatible memory layout so the CPU and GPU
 /// agree on field placement. bytemuck::Pod / Zeroable allow reinterpreting the
 /// struct as raw bytes for upload to a GPU buffer.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Vertex {
+    position: [f32; 3],  // Position (x, y, z) in 3D space
+    normal: [f32; 3],    // Normal for lighting (unused by the cloth, used by the sphere)
+    color: [f32; 3],     // RGB color (each component in 0.0..=1.0)
+}
+
