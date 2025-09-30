@@ -32,3 +32,7 @@ struct Vertex {
     color: [f32; 3],     // RGB color (each component in 0.0..=1.0)
 }
 
+impl Vertex {
+    /// Describes to the GPU how to read Vertex data out of the vertex buffer:
+    /// the stride between vertices, each attribute's byte offset, and how to step
+    /// through the buffer.
