@@ -46,3 +46,13 @@ impl Vertex {
 
             attributes: &[
                 // Attribute 0: position
+                wgpu::VertexAttribute {
+                    offset: 0,  // Start of the struct
+                    shader_location: 0,  // Matches @location(0) in the shader
+                    format: wgpu::VertexFormat::Float32x3,  // 3 floats (x, y, z)
+                },
+                // Attribute 1: normal
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,  // After position (12 bytes)
+                    shader_location: 1,  // @location(1)
+                    format: wgpu::VertexFormat::Float32x3,
