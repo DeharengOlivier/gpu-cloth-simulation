@@ -36,3 +36,13 @@ impl Vertex {
     /// Describes to the GPU how to read Vertex data out of the vertex buffer:
     /// the stride between vertices, each attribute's byte offset, and how to step
     /// through the buffer.
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            // Bytes between consecutive vertices: 9 floats x 4 bytes = 36 bytes.
+            array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+
+            // Vertex step mode: advance once per vertex (Instance mode is used by Instance).
+            step_mode: wgpu::VertexStepMode::Vertex,
+
+            attributes: &[
+                // Attribute 0: position
