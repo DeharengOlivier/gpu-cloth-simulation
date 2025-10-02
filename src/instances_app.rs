@@ -66,3 +66,10 @@ impl Vertex {
             ],
         }
     }
+}
+
+/// One cloth particle.
+///
+/// Instancing: instead of duplicating the small visualization sphere for every
+/// particle, the shared mesh is drawn once per Instance, translated to that
+/// particle's position. Each Instance therefore only carries per-particle data.
