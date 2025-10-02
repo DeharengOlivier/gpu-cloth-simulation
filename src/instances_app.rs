@@ -56,3 +56,13 @@ impl Vertex {
                     offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,  // After position (12 bytes)
                     shader_location: 1,  // @location(1)
                     format: wgpu::VertexFormat::Float32x3,
+                },
+                // Attribute 2: color
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,  // After position + normal (24 bytes)
+                    shader_location: 2,  // @location(2)
+                    format: wgpu::VertexFormat::Float32x3,
+                },
+            ],
+        }
+    }
