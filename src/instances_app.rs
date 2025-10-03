@@ -73,3 +73,12 @@ impl Vertex {
 /// Instancing: instead of duplicating the small visualization sphere for every
 /// particle, the shared mesh is drawn once per Instance, translated to that
 /// particle's position. Each Instance therefore only carries per-particle data.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct Instance {
+    position: [f32; 4],  // Particle position (x, y, z) + 1 float of padding
+    speed: [f32; 4],     // Particle velocity (vx, vy, vz) + padding
+                         // vec4 is used so each field is 16-byte aligned for the GPU,
+                         // matching the vec4 layout of Instance in compute.wgsl.
+}
+
