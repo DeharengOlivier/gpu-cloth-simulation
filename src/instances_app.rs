@@ -82,3 +82,8 @@ struct Instance {
                          // matching the vec4 layout of Instance in compute.wgsl.
 }
 
+impl Instance {
+    /// Vertex buffer layout for instanced rendering.
+    ///
+    /// Unlike Vertex, step_mode is Instance: this data advances once per drawn
+    /// instance rather than once per vertex.
