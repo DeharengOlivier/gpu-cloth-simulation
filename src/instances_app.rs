@@ -97,3 +97,13 @@ impl Instance {
             attributes: &[
                 // Instance position
                 wgpu::VertexAttribute {
+                    offset: 0,
+                    shader_location: 3,  // @location(3) in the shader
+                    format: wgpu::VertexFormat::Float32x3,  // The 4th (padding) component is ignored
+                },
+                // Instance velocity (not used by the render shader, but kept for the compute layout)
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32;3]>() as wgpu::BufferAddress,
+                    shader_location: 4,  // @location(4) in the shader
+                    format: wgpu::VertexFormat::Float32x3,
+                },
