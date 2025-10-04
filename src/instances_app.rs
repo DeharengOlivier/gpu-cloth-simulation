@@ -87,3 +87,13 @@ impl Instance {
     ///
     /// Unlike Vertex, step_mode is Instance: this data advances once per drawn
     /// instance rather than once per vertex.
+    fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<Instance>() as wgpu::BufferAddress,
+
+            // Same data for every vertex of an instance, different per instance.
+            step_mode: wgpu::VertexStepMode::Instance,
+
+            attributes: &[
+                // Instance position
+                wgpu::VertexAttribute {
