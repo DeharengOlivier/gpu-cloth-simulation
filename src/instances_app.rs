@@ -114,3 +114,13 @@ impl Instance {
 
 /// Time uniform. Bound to the compute pass for layout compatibility but not read
 /// by the current simulation step.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct TimeUniform {
+    generation_duration: f32,  // Duration of a generated frame
+}
+
+/// Physics simulation parameters, uploaded as a uniform buffer.
+///
+/// Uniform = constant for the whole compute dispatch and readable by every
+/// invocation, so the simulation can be tuned without recompiling the shaders.
