@@ -107,3 +107,10 @@ impl Instance {
                     shader_location: 4,  // @location(4) in the shader
                     format: wgpu::VertexFormat::Float32x3,
                 },
+            ],
+        }
+    }
+}
+
+/// Time uniform. Bound to the compute pass for layout compatibility but not read
+/// by the current simulation step.
