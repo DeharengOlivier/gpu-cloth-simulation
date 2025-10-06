@@ -124,3 +124,7 @@ struct TimeUniform {
 ///
 /// Uniform = constant for the whole compute dispatch and readable by every
 /// invocation, so the simulation can be tuned without recompiling the shaders.
+/// IMPORTANT: the field order here must match PhysicsParams in compute.wgsl,
+/// since the CPU/GPU mapping is by byte offset (bytemuck), not by name.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
