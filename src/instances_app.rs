@@ -128,3 +128,13 @@ struct TimeUniform {
 /// since the CPU/GPU mapping is by byte offset (bytemuck), not by name.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct PhysicsParams {
+    structural_k: f32,    // Structural spring stiffness (direct neighbours)
+    shear_k: f32,         // Shear spring stiffness (diagonals)
+    bend_k: f32,          // Bend spring stiffness (two cells apart)
+    damping: f32,         // Damping coefficient (prevents endless oscillation)
+    mass: f32,            // Mass of each particle (for F = m*a)
+    rest_length: f32,     // Spring rest length (natural distance between particles)
+    dt: f32,              // Time step of the simulation
+    friction: f32,        // Friction coefficient with the sphere
+    sphere_radius: f32,   // Radius of the collision sphere
