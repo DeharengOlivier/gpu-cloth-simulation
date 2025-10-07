@@ -138,3 +138,7 @@ struct PhysicsParams {
     dt: f32,              // Time step of the simulation
     friction: f32,        // Friction coefficient with the sphere
     sphere_radius: f32,   // Radius of the collision sphere
+}
+
+// ============================================================================
+// APPLICATION SETTINGS
