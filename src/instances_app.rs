@@ -142,3 +142,9 @@ struct PhysicsParams {
 
 // ============================================================================
 // APPLICATION SETTINGS
+// ============================================================================
+
+/// User-tunable configuration exposed through the egui panel.
+///
+/// Some changes (grid_size, spacing, point_size) require rebuilding the GPU
+/// buffers; colors can be updated in place.
