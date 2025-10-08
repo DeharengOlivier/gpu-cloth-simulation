@@ -148,3 +148,12 @@ struct PhysicsParams {
 ///
 /// Some changes (grid_size, spacing, point_size) require rebuilding the GPU
 /// buffers; colors can be updated in place.
+#[derive(Clone)]
+pub struct ClothSettings {
+    pub grid_size: u32,        // N for the NxN grid (particles per side)
+    pub spacing: f32,          // Distance between adjacent particles
+    pub point_size: f32,       // Render size of each particle (radius of its mini-sphere)
+    pub cloth_color: [f32; 3], // Cloth RGB color
+    pub sphere_color: [f32; 3],// Central sphere RGB color
+}
+
