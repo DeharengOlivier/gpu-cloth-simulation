@@ -157,3 +157,13 @@ pub struct ClothSettings {
     pub sphere_color: [f32; 3],// Central sphere RGB color
 }
 
+impl Default for ClothSettings {
+    /// Default parameter values.
+    fn default() -> Self {
+        Self {
+            grid_size: 256,              // 256x256 grid = 65,536 particles
+            spacing: 0.006,              // 6 mm between particles
+            point_size: 0.0033,          // Visualization sphere radius
+            cloth_color: [1.0, 0.0, 0.0],// Red
+            sphere_color: [0.5, 0.5, 0.5],// Grey
+        }
