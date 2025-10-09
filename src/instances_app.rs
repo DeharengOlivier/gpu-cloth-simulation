@@ -172,3 +172,7 @@ impl Default for ClothSettings {
 
 // ============================================================================
 // MAIN APPLICATION STRUCTURE
+// ============================================================================
+
+/// Core of the cloth simulation. Holds every GPU resource and bit of state
+/// needed to simulate and render the cloth. Implements wgpu_bootstrap's App trait.
