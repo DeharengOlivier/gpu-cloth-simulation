@@ -167,3 +167,8 @@ impl Default for ClothSettings {
             cloth_color: [1.0, 0.0, 0.0],// Red
             sphere_color: [0.5, 0.5, 0.5],// Grey
         }
+    }
+}
+
+// ============================================================================
+// MAIN APPLICATION STRUCTURE
