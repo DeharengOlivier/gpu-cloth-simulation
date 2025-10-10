@@ -176,3 +176,9 @@ impl Default for ClothSettings {
 
 /// Core of the cloth simulation. Holds every GPU resource and bit of state
 /// needed to simulate and render the cloth. Implements wgpu_bootstrap's App trait.
+pub struct InstanceApp {
+    // === Cloth GPU buffers ===
+    vertex_buffer: wgpu::Buffer,        // Geometry of the mini-spheres (vertices)
+    instance_buffer: [wgpu::Buffer; 2], // Particle position/velocity (ping-pong pair)
+    index_buffer: wgpu::Buffer,         // Triangle indices
+
