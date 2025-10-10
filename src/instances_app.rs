@@ -182,3 +182,7 @@ pub struct InstanceApp {
     instance_buffer: [wgpu::Buffer; 2], // Particle position/velocity (ping-pong pair)
     index_buffer: wgpu::Buffer,         // Triangle indices
 
+    // === Render and compute pipelines ===
+    render_pipeline: wgpu::RenderPipeline,   // Draws the cloth
+    compute_pipeline: wgpu::ComputePipeline, // Runs the physics step
+
