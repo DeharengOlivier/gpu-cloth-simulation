@@ -190,3 +190,7 @@ pub struct InstanceApp {
     num_indices: u32,      // Number of indices to draw per cloth particle
     num_instances: u32,    // Number of particles (instances)
 
+    // === Camera ===
+    camera: OrbitCamera,   // Mouse-controllable orbit camera
+    last_generation: Instant, // Timestamp of the last simulation step (timing)
+
