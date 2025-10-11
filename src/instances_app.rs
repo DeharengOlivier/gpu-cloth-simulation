@@ -186,3 +186,7 @@ pub struct InstanceApp {
     render_pipeline: wgpu::RenderPipeline,   // Draws the cloth
     compute_pipeline: wgpu::ComputePipeline, // Runs the physics step
 
+    // === Metadata ===
+    num_indices: u32,      // Number of indices to draw per cloth particle
+    num_instances: u32,    // Number of particles (instances)
+
