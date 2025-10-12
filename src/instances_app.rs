@@ -194,3 +194,8 @@ pub struct InstanceApp {
     camera: OrbitCamera,   // Mouse-controllable orbit camera
     last_generation: Instant, // Timestamp of the last simulation step (timing)
 
+    // === Bind groups ===
+    // Bind groups connect buffers to the shaders. Two are kept for the ping-pong
+    // scheme: index 0 is the one used this step, swapped after each step.
+    bind_group: [wgpu::BindGroup; 2],
+
