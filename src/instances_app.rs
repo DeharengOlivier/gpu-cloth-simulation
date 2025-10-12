@@ -199,3 +199,9 @@ pub struct InstanceApp {
     // scheme: index 0 is the one used this step, swapped after each step.
     bind_group: [wgpu::BindGroup; 2],
 
+    // === Central sphere GPU buffers ===
+    sphere_index_buffer: wgpu::Buffer,
+    sphere_vertex_buffer: wgpu::Buffer,
+    num_sphere_indices: u32,
+    sphere_render_pipeline: wgpu::RenderPipeline,
+
