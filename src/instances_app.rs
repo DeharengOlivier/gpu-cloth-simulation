@@ -212,3 +212,13 @@ pub struct InstanceApp {
     paused: bool,                    // Pause/play state of the simulation
 }
 
+// ============================================================================
+// CLOTH GRID GENERATION
+// ============================================================================
+
+/// Builds the grid of particles that make up the cloth.
+///
+/// Separation of concerns:
+/// - Vertices: the base mesh (a small sphere) shared by ALL particles.
+/// - Instances: the unique position of each particle in the grid.
+///
