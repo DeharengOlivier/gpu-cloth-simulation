@@ -205,3 +205,10 @@ pub struct InstanceApp {
     num_sphere_indices: u32,
     sphere_render_pipeline: wgpu::RenderPipeline,
 
+    // === UI state ===
+    settings: ClothSettings,         // Settings currently applied
+    pending_settings: ClothSettings, // Settings edited in the UI, not yet applied
+    needs_rebuild: bool,             // Set when a rebuild is required
+    paused: bool,                    // Pause/play state of the simulation
+}
+
