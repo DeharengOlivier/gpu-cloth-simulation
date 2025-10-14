@@ -222,3 +222,13 @@ pub struct InstanceApp {
 /// - Vertices: the base mesh (a small sphere) shared by ALL particles.
 /// - Instances: the unique position of each particle in the grid.
 ///
+/// The GPU draws the same mesh (vertices) once per instance, at each instance's
+/// position. This is instanced rendering.
+///
+/// # Arguments
+/// * `rows` - Number of particle rows
+/// * `cols` - Number of particle columns
+/// * `spacing` - Distance between adjacent particles
+/// * `displacement` - Initial height of the cloth
+/// * `sphere_scale` - Radius of the visualization mini-spheres
+/// * `cloth_color` - RGB color of the particles
