@@ -242,3 +242,13 @@ fn generate_grid(
     spacing: f32,
     displacement: f32,
     sphere_scale: f32,
+    cloth_color: [f32; 3],
+) -> (Vec<Vertex>, wgpu::Buffer, Vec<Instance>, Vec<Instance>, Vec<u32>) {
+    // Generate a subdivided sphere (icosphere, subdivision level 2).
+    // Higher level = smoother sphere but more triangles per particle.
+    let (positions, indices) = icosphere(2);
+
+    // Build the vertices: scale the unit-sphere positions and tag them with a
+    // (zero) normal and the cloth color.
+    let vertices: Vec<Vertex> = positions
+        .iter()
