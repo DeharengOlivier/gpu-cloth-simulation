@@ -232,3 +232,13 @@ pub struct InstanceApp {
 /// * `displacement` - Initial height of the cloth
 /// * `sphere_scale` - Radius of the visualization mini-spheres
 /// * `cloth_color` - RGB color of the particles
+///
+/// # Returns
+/// (vertices, index_buffer, instances, instances_copy, indices)
+fn generate_grid(
+    context: &Context,
+    rows: u32,
+    cols: u32,
+    spacing: f32,
+    displacement: f32,
+    sphere_scale: f32,
