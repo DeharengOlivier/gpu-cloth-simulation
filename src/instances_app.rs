@@ -262,3 +262,13 @@ fn generate_grid(
     // Index buffer: triangle indices referencing the vertices above, so vertices
     // are not duplicated (e.g. triangle (0,1,2) reuses vertices 0, 1 and 2).
     let index_buffer = context
+        .device()
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            // bytemuck::cast_slice reinterprets Vec<u32> as raw &[u8] for upload.
+            contents: bytemuck::cast_slice(indices.as_slice()),
+            // INDEX usage: this buffer feeds indexed draws.
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+    // Build the particle grid: one Instance (position + velocity) per particle,
