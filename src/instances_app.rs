@@ -252,3 +252,13 @@ fn generate_grid(
     // (zero) normal and the cloth color.
     let vertices: Vec<Vertex> = positions
         .iter()
+        .map(|position| Vertex {
+            position: (*position * sphere_scale).into(), // Scale the sphere
+            normal: [0.0, 0.0, 0.0],                     // Normal unused for the cloth
+            color: cloth_color,                          // Cloth color
+        })
+        .collect();
+
+    // Index buffer: triangle indices referencing the vertices above, so vertices
+    // are not duplicated (e.g. triangle (0,1,2) reuses vertices 0, 1 and 2).
+    let index_buffer = context
