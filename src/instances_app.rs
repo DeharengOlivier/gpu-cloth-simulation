@@ -281,3 +281,13 @@ fn generate_grid(
     (vertices, index_buffer, instances, instances_copy, indices)
 }
 
+// ============================================================================
+// SIMULATION CONSTANTS
+// ============================================================================
+
+/// Fixed simulation time step, in seconds.
+///
+/// Using a fixed time step (rather than the frame's variable delta_time) keeps
+/// the integration deterministic and stable regardless of frame rate.
+/// 0.0016 s is about 1/625, i.e. ~625 physics iterations per simulated second.
+/// (Name kept as-is to avoid a behavior-neutral rename of a referenced symbol.)
