@@ -272,3 +272,12 @@ fn generate_grid(
         });
 
     // Build the particle grid: one Instance (position + velocity) per particle,
+    // centered on the origin. (Pure-CPU logic, see generate_instances.)
+    let instances: Vec<Instance> = generate_instances(rows, cols, spacing, displacement);
+
+    // Identical copy used to initialize the second ping-pong buffer (see below).
+    let instances_copy = instances.clone();
+
+    (vertices, index_buffer, instances, instances_copy, indices)
+}
+
