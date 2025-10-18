@@ -298,3 +298,7 @@ const TAYME: f32 = 0.0016;
 /// The GPU schedules compute threads in workgroups that run together. 256 is a
 /// common, widely supported size. grid_size is rounded down to a multiple of
 /// this value so every particle is covered by a whole number of workgroups.
+const WORKGROUP_SIZE: u32 = 256;
+
+// ============================================================================
+// HELPER FUNCTIONS
