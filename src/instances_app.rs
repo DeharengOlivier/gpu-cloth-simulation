@@ -291,3 +291,10 @@ fn generate_grid(
 /// the integration deterministic and stable regardless of frame rate.
 /// 0.0016 s is about 1/625, i.e. ~625 physics iterations per simulated second.
 /// (Name kept as-is to avoid a behavior-neutral rename of a referenced symbol.)
+const TAYME: f32 = 0.0016;
+
+/// GPU workgroup size (threads per workgroup).
+///
+/// The GPU schedules compute threads in workgroups that run together. 256 is a
+/// common, widely supported size. grid_size is rounded down to a multiple of
+/// this value so every particle is covered by a whole number of workgroups.
