@@ -302,3 +302,12 @@ const WORKGROUP_SIZE: u32 = 256;
 
 // ============================================================================
 // HELPER FUNCTIONS
+// ============================================================================
+
+/// Rounds a requested grid side length down to a multiple of WORKGROUP_SIZE and
+/// clamps it to at least one full workgroup.
+///
+/// The compute dispatch covers `grid_size / WORKGROUP_SIZE` workgroups of
+/// WORKGROUP_SIZE threads each, so the side length must be a whole multiple of
+/// WORKGROUP_SIZE for every particle to be processed (and never zero). This is
+/// pure integer arithmetic, extracted so it can be unit-tested without a GPU.
