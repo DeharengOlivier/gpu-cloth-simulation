@@ -311,3 +311,13 @@ const WORKGROUP_SIZE: u32 = 256;
 /// WORKGROUP_SIZE threads each, so the side length must be a whole multiple of
 /// WORKGROUP_SIZE for every particle to be processed (and never zero). This is
 /// pure integer arithmetic, extracted so it can be unit-tested without a GPU.
+fn round_grid_size(grid_size: u32) -> u32 {
+    let rounded = (grid_size / WORKGROUP_SIZE) * WORKGROUP_SIZE;
+    rounded.max(WORKGROUP_SIZE) // Minimum one workgroup
+}
+
+/// Builds the per-particle instances (position + velocity) for an `rows` x `cols`
+/// grid centered on the origin, at height `displacement`, with the given spacing.
+///
+/// This is the pure-CPU part of `generate_grid` (no GPU device needed), separated
+/// so the grid layout can be unit-tested. Behavior is identical to the original
