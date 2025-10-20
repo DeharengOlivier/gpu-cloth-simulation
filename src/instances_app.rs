@@ -321,3 +321,13 @@ fn round_grid_size(grid_size: u32) -> u32 {
 ///
 /// This is the pure-CPU part of `generate_grid` (no GPU device needed), separated
 /// so the grid layout can be unit-tested. Behavior is identical to the original
+/// inline loop: row-major order (index = row * cols + col), centered on X/Z, the
+/// 4th position component is padding, and every particle starts at rest.
+fn generate_instances(rows: u32, cols: u32, spacing: f32, displacement: f32) -> Vec<Instance> {
+    (0..rows)
+        .flat_map(|row| {
+            (0..cols).map(move |col| Instance {
+                position: [
+                    // X: centered, spaced by 'spacing'
+                    (col as f32 - cols as f32 / 2.0) * spacing,
+                    // Y: initial height
