@@ -331,3 +331,13 @@ fn generate_instances(rows: u32, cols: u32, spacing: f32, displacement: f32) -> 
                     // X: centered, spaced by 'spacing'
                     (col as f32 - cols as f32 / 2.0) * spacing,
                     // Y: initial height
+                    displacement,
+                    // Z: centered, spaced by 'spacing'
+                    (row as f32 - rows as f32 / 2.0) * spacing,
+                    0.0, // Padding (vec4 alignment)
+                ],
+                speed: [0.0, 0.0, 0.0, 0.0], // Start at rest
+            })
+        })
+        .collect()
+}
