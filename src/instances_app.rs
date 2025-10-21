@@ -341,3 +341,8 @@ fn generate_instances(rows: u32, cols: u32, spacing: f32, displacement: f32) -> 
         })
         .collect()
 }
+
+/// Builds the vertices for the central obstacle sphere.
+///
+/// This sphere is static and acts as an obstacle for the cloth. Unlike the
+/// cloth it does NOT use instancing: it is drawn exactly once.
