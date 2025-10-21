@@ -346,3 +346,13 @@ fn generate_instances(rows: u32, cols: u32, spacing: f32, displacement: f32) -> 
 ///
 /// This sphere is static and acts as an obstacle for the cloth. Unlike the
 /// cloth it does NOT use instancing: it is drawn exactly once.
+fn create_sphere_vertices(sphere_radius: f32, sphere_color: [f32; 3]) -> (Vec<Vertex>, Vec<u32>) {
+    // Subdivision level 3: more detailed than the cloth's mini-spheres.
+    let (positions, indices) = icosphere(3);
+    let vertices: Vec<Vertex> = positions
+        .iter()
+        .map(|position| {
+            // On a unit sphere the outward normal equals the normalized position.
+            let normal = position.normalize();
+            Vertex {
+                position: (normal * sphere_radius).into(), // Place on the surface
