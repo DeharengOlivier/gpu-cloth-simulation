@@ -364,3 +364,7 @@ fn create_sphere_vertices(sphere_radius: f32, sphere_color: [f32; 3]) -> (Vec<Ve
     (vertices, indices)
 }
 
+// ============================================================================
+// APPLICATION IMPLEMENTATION
+// ============================================================================
+
