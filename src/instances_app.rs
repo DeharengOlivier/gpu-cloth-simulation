@@ -356,3 +356,11 @@ fn create_sphere_vertices(sphere_radius: f32, sphere_color: [f32; 3]) -> (Vec<Ve
             let normal = position.normalize();
             Vertex {
                 position: (normal * sphere_radius).into(), // Place on the surface
+                normal: normal.into(),                     // Normal for lighting
+                color: sphere_color,                       // Sphere color
+            }
+        })
+        .collect();
+    (vertices, indices)
+}
+
