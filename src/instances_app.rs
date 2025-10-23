@@ -368,3 +368,13 @@ fn create_sphere_vertices(sphere_radius: f32, sphere_color: [f32; 3]) -> (Vec<Ve
 // APPLICATION IMPLEMENTATION
 // ============================================================================
 
+impl InstanceApp {
+    /// Main constructor: initializes with default settings.
+    pub fn new(context: &Context) -> Self {
+        let settings = ClothSettings::default();
+        Self::create_with_settings(context, settings)
+    }
+
+    /// Constructor with explicit settings. Does all the initialization work:
+    /// 1. Create GPU buffers
+    /// 2. Compile the shaders
