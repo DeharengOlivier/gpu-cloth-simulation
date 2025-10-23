@@ -378,3 +378,13 @@ impl InstanceApp {
     /// Constructor with explicit settings. Does all the initialization work:
     /// 1. Create GPU buffers
     /// 2. Compile the shaders
+    /// 3. Configure the pipelines
+    /// 4. Bind the resources (bind groups)
+    fn create_with_settings(context: &Context, settings: ClothSettings) -> Self {
+        // === STEP 1: VALIDATE AND GENERATE THE GRID ===
+
+        // Round grid_size down to a multiple of WORKGROUP_SIZE so the dispatch
+        // covers exactly all particles, then clamp to at least one workgroup.
+        let grid_size = round_grid_size(settings.grid_size);
+
+        // Generate the vertices (mini-sphere geometry) and instances (particles).
