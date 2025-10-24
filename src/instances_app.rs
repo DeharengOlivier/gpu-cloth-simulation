@@ -388,3 +388,13 @@ impl InstanceApp {
         let grid_size = round_grid_size(settings.grid_size);
 
         // Generate the vertices (mini-sphere geometry) and instances (particles).
+        let (vertices, index_buffer, instances, instances_copy, indices) = generate_grid(
+            &context,
+            grid_size,       // Rows
+            grid_size,       // Columns
+            settings.spacing,// Distance between particles
+            0.5,             // Initial height
+            settings.point_size, // Visualization sphere radius
+            settings.cloth_color, // Color
+        );
+
