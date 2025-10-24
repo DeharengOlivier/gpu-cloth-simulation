@@ -398,3 +398,13 @@ impl InstanceApp {
             settings.cloth_color, // Color
         );
 
+        let num_indices = indices.len() as u32;     // Indices to draw per particle
+        let num_instances = instances.len() as u32; // Total particle count
+
+        // === STEP 2: UNIFORM BUFFERS ===
+
+        // TimeUniform: currently unused, kept for bind-group compatibility.
+        let time_uniform = TimeUniform {
+            generation_duration: Duration::new(0, 1_000_000).as_secs_f32(),
+        };
+
