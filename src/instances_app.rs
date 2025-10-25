@@ -416,3 +416,13 @@ impl InstanceApp {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
+        // === STEP 3: VERTEX AND INSTANCE BUFFERS ===
+
+        // Vertex buffer: mini-sphere geometry shared by every particle.
+        // VERTEX = used as vertex input; COPY_DST = color can be updated in place.
+        let vertex_buffer = context
+            .device()
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Buffer"),
+                contents: bytemuck::cast_slice(vertices.as_slice()),
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
