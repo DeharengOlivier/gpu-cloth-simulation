@@ -408,3 +408,11 @@ impl InstanceApp {
             generation_duration: Duration::new(0, 1_000_000).as_secs_f32(),
         };
 
+        // Uniform buffer (constant during a draw/compute call).
+        // COPY_DST lets us update it later via queue.write_buffer().
+        let time_buffer = context.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Time Uniform Buffer"),
+            contents: bytemuck::cast_slice(&[time_uniform]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
