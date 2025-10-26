@@ -436,3 +436,13 @@ impl InstanceApp {
         //
         //   Step N:   Buffer[0] (read) -> Compute -> Buffer[1] (write)
         //   Step N+1: Buffer[1] (read) -> Compute -> Buffer[0] (write)
+        //
+        // Both buffers also serve as instance vertex buffers for rendering.
+        let instance_buffer = [
+            context
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Instance Buffer Ping"),
+                    contents: bytemuck::cast_slice(&instances.as_slice()),
+                    // STORAGE = read/write in the compute shader.
+                    // VERTEX = usable as instanced vertex data.
