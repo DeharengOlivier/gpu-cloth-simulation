@@ -426,3 +426,13 @@ impl InstanceApp {
                 label: Some("Vertex Buffer"),
                 contents: bytemuck::cast_slice(vertices.as_slice()),
                 usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            });
+
+        // === PING-PONG BUFFERS ===
+        //
+        // The compute shader must read the current particle state and write the
+        // next one. Two buffers alternate read/write roles to avoid reading and
+        // writing the same memory in a single parallel pass:
+        //
+        //   Step N:   Buffer[0] (read) -> Compute -> Buffer[1] (write)
+        //   Step N+1: Buffer[1] (read) -> Compute -> Buffer[0] (write)
