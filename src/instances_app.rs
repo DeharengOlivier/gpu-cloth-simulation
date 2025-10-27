@@ -446,3 +446,13 @@ impl InstanceApp {
                     contents: bytemuck::cast_slice(&instances.as_slice()),
                     // STORAGE = read/write in the compute shader.
                     // VERTEX = usable as instanced vertex data.
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
+                }),
+            context
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Instance Buffer Pong"),
+                    contents: bytemuck::cast_slice(&instances_copy.as_slice()),
+                    usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
+                }),
+        ];
