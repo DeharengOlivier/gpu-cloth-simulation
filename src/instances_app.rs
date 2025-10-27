@@ -456,3 +456,13 @@ impl InstanceApp {
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
                 }),
         ];
+
+        // === STEP 4: PHYSICS PARAMETERS ===
+
+        let (_positions, _indices) = icosphere(3); // Generated but unused here
+        let sphere_radius = 0.4; // Obstacle sphere radius
+
+        // Force coefficients and behavior of the simulation.
+        let physics_params = PhysicsParams {
+            structural_k: 4000.0 * 1.5,  // Structural stiffness (direct links)
+            shear_k: 2000.0 * 1.5,       // Shear stiffness (diagonals)
