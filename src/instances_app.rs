@@ -466,3 +466,13 @@ impl InstanceApp {
         let physics_params = PhysicsParams {
             structural_k: 4000.0 * 1.5,  // Structural stiffness (direct links)
             shear_k: 2000.0 * 1.5,       // Shear stiffness (diagonals)
+            bend_k: 300.0 * 1.5,         // Bend stiffness (two cells apart)
+            damping: 0.1,                // Damping (dissipates energy)
+            mass: 0.1,                   // Mass per particle
+            rest_length: settings.spacing, // Must equal spacing so the grid starts relaxed
+            dt: TAYME,                   // Time step
+            friction: 0.8,               // Friction with the sphere
+            sphere_radius: sphere_radius,// Collision radius
+        };
+
+        // Uniform buffer for the physics parameters.
