@@ -484,3 +484,13 @@ impl InstanceApp {
             }
         );
 
+        // === STEP 5: OBSTACLE SPHERE ===
+
+        // Build the sphere with the color from the settings.
+        let (sphere_vertices, sphere_indices) = create_sphere_vertices(sphere_radius, settings.sphere_color);
+
+        // Sphere buffers (static, no instancing).
+        let sphere_vertex_buffer = context
+            .device()
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Sphere Vertex Buffer"),
