@@ -476,3 +476,11 @@ impl InstanceApp {
         };
 
         // Uniform buffer for the physics parameters.
+        let physics_buffer = context.device().create_buffer_init(
+            &wgpu::util::BufferInitDescriptor {
+                label: Some("Physics Params Buffer"),
+                contents: bytemuck::cast_slice(&[physics_params]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            }
+        );
+
