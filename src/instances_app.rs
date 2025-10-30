@@ -494,3 +494,13 @@ impl InstanceApp {
             .device()
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Sphere Vertex Buffer"),
+                contents: bytemuck::cast_slice(sphere_vertices.as_slice()),
+                // COPY_DST: lets the color be updated in place.
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            });
+
+        let sphere_index_buffer = context
+            .device()
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Sphere Index Buffer"),
+                contents: bytemuck::cast_slice(sphere_indices.as_slice()),
