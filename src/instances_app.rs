@@ -504,3 +504,13 @@ impl InstanceApp {
             .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("Sphere Index Buffer"),
                 contents: bytemuck::cast_slice(sphere_indices.as_slice()),
+                usage: wgpu::BufferUsages::INDEX,
+            });
+
+        // === STEP 6: SHADER COMPILATION ===
+
+        // Render shader (vertex + fragment).
+        let shader = context
+            .device()
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Shader"),
