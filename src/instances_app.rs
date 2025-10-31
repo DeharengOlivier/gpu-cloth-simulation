@@ -524,3 +524,9 @@ impl InstanceApp {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Compute Shader"),
                 source: wgpu::ShaderSource::Wgsl(
+                    include_str!("compute.wgsl")
+                        .replace("WORKGROUP_SIZE", &format!("{}", WORKGROUP_SIZE))
+                        .into()
+                ),
+            });
+
