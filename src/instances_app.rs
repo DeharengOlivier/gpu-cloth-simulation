@@ -514,3 +514,13 @@ impl InstanceApp {
             .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            });
+
+        // Compute shader: the GPU physics step. The literal "WORKGROUP_SIZE" in
+        // the WGSL source is substituted with the actual value before compilation.
+        let compute_shader = context
+            .device()
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Compute Shader"),
+                source: wgpu::ShaderSource::Wgsl(
