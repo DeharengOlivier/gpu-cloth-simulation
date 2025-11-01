@@ -540,3 +540,13 @@ impl InstanceApp {
             .device()
             .create_bind_group_layout(&CameraUniform::desc());
 
+        // Layout for the compute shader, with 4 bindings:
+        let instance_bind_group_layout = context.device().create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Compute Bind Group Layout"),
+            entries: &[
+                // Binding 0: instance read buffer (ping)
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::COMPUTE, // Compute stage only
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Storage { read_only: false }, // read_write storage
