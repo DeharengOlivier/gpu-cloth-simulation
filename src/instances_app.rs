@@ -530,3 +530,13 @@ impl InstanceApp {
                 ),
             });
 
+        // === STEP 7: BIND GROUP LAYOUTS ===
+        //
+        // A bind group layout declares which resources a shader expects and how
+        // they are accessed; the bind group itself supplies the concrete buffers.
+
+        // Layout for the camera (view + projection matrices).
+        let camera_bind_group_layout = context
+            .device()
+            .create_bind_group_layout(&CameraUniform::desc());
+
