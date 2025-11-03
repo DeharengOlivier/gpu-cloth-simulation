@@ -570,3 +570,13 @@ impl InstanceApp {
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
                     visibility: wgpu::ShaderStages::COMPUTE,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform, // Uniform = read-only, constant
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                },
+                // Binding 3: physics parameters
+                wgpu::BindGroupLayoutEntry {
+                    binding: 3,
