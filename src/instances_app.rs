@@ -600,3 +600,13 @@ impl InstanceApp {
             .device()
             .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout], // Bind group 0 = camera
+                push_constant_ranges: &[], // No push constants
+            });
+
+        // Compute pipeline layout (physics): instance buffers + params at bind group 0.
+        let compute_pipeline_layout = context.device().create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Compute Pipeline Layout"),
+            bind_group_layouts: &[&instance_bind_group_layout], // Bind group 0 = instances + params
+            push_constant_ranges: &[], // No push constants
+        });
