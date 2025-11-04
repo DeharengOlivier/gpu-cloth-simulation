@@ -590,3 +590,13 @@ impl InstanceApp {
                 },
             ],
         });
+
+        // === STEP 8: PIPELINE LAYOUTS ===
+        //
+        // A pipeline layout fixes which bind groups a pipeline uses and in what order.
+
+        // Render pipeline layout (cloth): uses only the camera at bind group 0.
+        let pipeline_layout = context
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Render Pipeline Layout"),
