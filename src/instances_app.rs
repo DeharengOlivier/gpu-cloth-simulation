@@ -620,3 +620,13 @@ impl InstanceApp {
             .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
                 label: Some("Render Pipeline"),
                 layout: Some(&pipeline_layout), // Layout defined above
+
+                // Vertex stage: transforms 3D positions into clip space.
+                vertex: wgpu::VertexState {
+                    module: &shader,              // Compiled WGSL module
+                    entry_point: "vs_main",       // Vertex entry point
+                    buffers: &[Vertex::desc(), Instance::desc()], // Two buffers: geometry + instances
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+
+                // Fragment stage: computes each pixel's color.
