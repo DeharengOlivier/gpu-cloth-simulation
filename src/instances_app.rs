@@ -610,3 +610,13 @@ impl InstanceApp {
             bind_group_layouts: &[&instance_bind_group_layout], // Bind group 0 = instances + params
             push_constant_ranges: &[], // No push constants
         });
+
+        // === STEP 9: RENDER PIPELINE ===
+        //
+        // The render pipeline is the full configuration that turns vertices into
+        // pixels on screen.
+        let render_pipeline = context
+            .device()
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Render Pipeline"),
+                layout: Some(&pipeline_layout), // Layout defined above
