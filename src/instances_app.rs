@@ -630,3 +630,13 @@ impl InstanceApp {
                 },
 
                 // Fragment stage: computes each pixel's color.
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: "fs_main",       // Fragment entry point
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: context.format(),          // Surface format (e.g. BGRA8)
+                        blend: Some(wgpu::BlendState::REPLACE), // No blending, overwrite
+                        write_mask: wgpu::ColorWrites::ALL,     // Write full RGBA
+                    })],
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                }),
