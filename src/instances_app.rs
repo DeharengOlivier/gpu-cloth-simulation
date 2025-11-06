@@ -640,3 +640,13 @@ impl InstanceApp {
                     })],
                     compilation_options: wgpu::PipelineCompilationOptions::default(),
                 }),
+
+                // Primitive assembly (triangles).
+                primitive: wgpu::PrimitiveState {
+                    topology: wgpu::PrimitiveTopology::TriangleList, // Triangle list
+                    strip_index_format: None,                        // Not a triangle strip
+                    front_face: wgpu::FrontFace::Ccw,                // Counter-clockwise = front face
+                    cull_mode: Some(wgpu::Face::Back),               // Cull back faces (optimization)
+                    polygon_mode: wgpu::PolygonMode::Fill,           // Filled triangles (not wireframe)
+                    unclipped_depth: false,
+                    conservative: false,
