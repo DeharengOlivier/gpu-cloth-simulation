@@ -660,3 +660,13 @@ impl InstanceApp {
                     stencil: wgpu::StencilState::default(),         // No stencil
                     bias: wgpu::DepthBiasState::default(),
                 }),
+
+                // Multisampling (anti-aliasing) disabled here.
+                multisample: wgpu::MultisampleState {
+                    count: 1,                       // No MSAA
+                    mask: !0,                       // All samples active
+                    alpha_to_coverage_enabled: false,
+                },
+                multiview: None,  // No stereo rendering (VR)
+                cache: None,      // No pipeline cache
+            });
