@@ -650,3 +650,13 @@ impl InstanceApp {
                     polygon_mode: wgpu::PolygonMode::Fill,           // Filled triangles (not wireframe)
                     unclipped_depth: false,
                     conservative: false,
+                },
+
+                // Depth test: discards fragments hidden behind closer ones.
+                depth_stencil: Some(wgpu::DepthStencilState {
+                    format: context.depth_stencil_format(),
+                    depth_write_enabled: true,                      // Write to the depth buffer
+                    depth_compare: wgpu::CompareFunction::Less,     // Keep the nearest fragment
+                    stencil: wgpu::StencilState::default(),         // No stencil
+                    bias: wgpu::DepthBiasState::default(),
+                }),
