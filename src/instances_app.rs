@@ -680,3 +680,11 @@ impl InstanceApp {
             context,
             45.0,    // Field of view, in degrees
             aspect,  // Aspect ratio (avoids distortion)
+            0.1,     // Near plane
+            100.0    // Far plane
+        );
+        // Place the camera 1.5 units from the center (polar coordinates).
+        camera
+            .set_polar(cgmath::point3(1.5, 0.0, 0.0))
+            .update(context); // Recompute the view/projection matrices
+
