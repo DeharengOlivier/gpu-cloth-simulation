@@ -670,3 +670,13 @@ impl InstanceApp {
                 multiview: None,  // No stereo rendering (VR)
                 cache: None,      // No pipeline cache
             });
+
+        // === STEP 10: CAMERA SETUP ===
+        //
+        // An orbit camera rotates around a central point, letting the user view
+        // the scene from any angle.
+        let aspect = context.size().x / context.size().y; // Window width/height ratio
+        let mut camera = OrbitCamera::new(
+            context,
+            45.0,    // Field of view, in degrees
+            aspect,  // Aspect ratio (avoids distortion)
