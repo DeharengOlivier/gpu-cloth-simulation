@@ -698,3 +698,8 @@ impl InstanceApp {
                 label: Some("Compute Pipeline"),
                 layout: Some(&compute_pipeline_layout), // Layout with instances + params
                 module: &compute_shader,                // Physics WGSL module
+                entry_point: "computeMain",             // @compute entry point
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                cache: None,
+            });
+
