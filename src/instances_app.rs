@@ -688,3 +688,13 @@ impl InstanceApp {
             .set_polar(cgmath::point3(1.5, 0.0, 0.0))
             .update(context); // Recompute the view/projection matrices
 
+        // === STEP 11: COMPUTE PIPELINE ===
+        //
+        // A compute pipeline configures a parallel GPU computation. It is simpler
+        // than a render pipeline: no vertex/fragment stages, just the kernel.
+        let compute_pipeline = context
+            .device()
+            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                label: Some("Compute Pipeline"),
+                layout: Some(&compute_pipeline_layout), // Layout with instances + params
+                module: &compute_shader,                // Physics WGSL module
