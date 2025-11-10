@@ -703,3 +703,13 @@ impl InstanceApp {
                 cache: None,
             });
 
+        // === STEP 12: BIND GROUPS (PING-PONG) ===
+        //
+        // Two bind groups reference the same two buffers with their read/write
+        // roles SWAPPED:
+        //
+        //   Ping: reads buffer[0], writes buffer[1]
+        //   Pong: reads buffer[1], writes buffer[0]
+        //
+        // After each step the active bind group is swapped, so output feeds back
+        // in as the next input without reading and writing the same buffer at once.
