@@ -713,3 +713,13 @@ impl InstanceApp {
         //
         // After each step the active bind group is swapped, so output feeds back
         // in as the next input without reading and writing the same buffer at once.
+        let bind_group = [
+            // === PING BIND GROUP ===
+            context
+                .device()
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Bind Group Ping"),
+                    layout: &instance_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,  // Binding 0 = READ buffer
