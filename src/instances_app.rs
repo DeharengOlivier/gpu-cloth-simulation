@@ -723,3 +723,13 @@ impl InstanceApp {
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,  // Binding 0 = READ buffer
+                            resource: instance_buffer[0].as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,  // Binding 1 = WRITE buffer
+                            resource: instance_buffer[1].as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,  // Time uniform (unused)
+                            resource: time_buffer.as_entire_binding(),
+                        },
