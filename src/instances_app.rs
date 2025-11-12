@@ -739,3 +739,13 @@ impl InstanceApp {
                         }
                     ],
                 }),
+            // === PONG BIND GROUP ===
+            // Read/write buffers are swapped relative to Ping.
+            context
+                .device()
+                .create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Bind Group Pong"),
+                    layout: &instance_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,  // READ buffer (now buffer[1])
