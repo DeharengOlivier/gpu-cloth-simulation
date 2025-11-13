@@ -759,3 +759,11 @@ impl InstanceApp {
                             binding: 2,  // Time uniform (same)
                             resource: time_buffer.as_entire_binding(),
                         },
+                        wgpu::BindGroupEntry {
+                            binding: 3,  // Physics parameters (same)
+                            resource: physics_buffer.as_entire_binding(),
+                        }
+                    ],
+                }),
+        ];
+
