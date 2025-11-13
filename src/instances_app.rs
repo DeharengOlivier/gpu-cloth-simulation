@@ -749,3 +749,13 @@ impl InstanceApp {
                     entries: &[
                         wgpu::BindGroupEntry {
                             binding: 0,  // READ buffer (now buffer[1])
+                            resource: instance_buffer[1].as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,  // WRITE buffer (now buffer[0])
+                            resource: instance_buffer[0].as_entire_binding(),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,  // Time uniform (same)
+                            resource: time_buffer.as_entire_binding(),
+                        },
