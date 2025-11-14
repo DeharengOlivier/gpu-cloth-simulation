@@ -777,3 +777,13 @@ impl InstanceApp {
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some("Sphere Shader"),
                 source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
+            });
+
+        // Same layout as the cloth: camera only.
+        let sphere_pipeline_layout = context
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("Sphere Pipeline Layout"),
+                bind_group_layouts: &[&camera_bind_group_layout],
+                push_constant_ranges: &[],
+            });
