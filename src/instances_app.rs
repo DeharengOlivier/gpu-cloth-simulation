@@ -767,3 +767,13 @@ impl InstanceApp {
                 }),
         ];
 
+        // === STEP 13: SPHERE PIPELINE ===
+        //
+        // The central sphere needs its own pipeline because it does NOT use
+        // instancing (drawn once) and uses different shader entry points
+        // (sphere_vs_main, sphere_fs_main).
+        let sphere_shader = context
+            .device()
+            .create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Sphere Shader"),
+                source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
