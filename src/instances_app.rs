@@ -797,3 +797,13 @@ impl InstanceApp {
                 layout: Some(&sphere_pipeline_layout),
                 vertex: wgpu::VertexState {
                     module: &sphere_shader,
+                    entry_point: "sphere_vs_main",       // Sphere-specific entry point
+                    buffers: &[Vertex::desc()],          // Vertices ONLY, no instances
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                },
+                fragment: Some(wgpu::FragmentState {
+                    module: &sphere_shader,
+                    entry_point: "sphere_fs_main",       // Sphere-specific entry point
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format: context.format(),
+                        blend: Some(wgpu::BlendState::REPLACE),
