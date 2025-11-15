@@ -787,3 +787,13 @@ impl InstanceApp {
                 bind_group_layouts: &[&camera_bind_group_layout],
                 push_constant_ranges: &[],
             });
+
+        // Sphere render pipeline. Key difference: buffers: &[Vertex::desc()] with
+        // NO Instance::desc(), because the sphere is static (no instancing).
+        let sphere_render_pipeline = context
+            .device()
+            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some("Sphere Render Pipeline"),
+                layout: Some(&sphere_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &sphere_shader,
