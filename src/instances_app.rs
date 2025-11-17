@@ -836,3 +836,13 @@ impl InstanceApp {
                 cache: None,
             });
 
+        // === STEP 14: RETURN THE FULLY INITIALIZED STRUCT ===
+        //
+        // Everything (buffers, pipelines, state) is now ready.
+        Self {
+            // Cloth buffers
+            vertex_buffer,         // Mini-sphere geometry
+            instance_buffer,       // [2] ping-pong buffers
+            index_buffer,          // Triangle indices
+
+            // GPU pipelines
