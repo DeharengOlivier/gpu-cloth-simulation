@@ -856,3 +856,13 @@ impl InstanceApp {
             // Camera and timing
             camera,                // Controllable orbit camera
             last_generation: Instant::now(), // Timing timestamp
+
+            // Ping-pong bind groups
+            bind_group,            // [2] alternating bind groups
+
+            // Central sphere
+            sphere_index_buffer,
+            sphere_vertex_buffer,
+            num_sphere_indices: sphere_indices.len() as u32,
+            sphere_render_pipeline,
+
