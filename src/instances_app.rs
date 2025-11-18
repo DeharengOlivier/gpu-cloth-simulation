@@ -846,3 +846,13 @@ impl InstanceApp {
             index_buffer,          // Triangle indices
 
             // GPU pipelines
+            render_pipeline,       // Cloth rendering
+            compute_pipeline,      // Physics step
+
+            // Metadata
+            num_indices,           // Indices to draw
+            num_instances,         // Particle count
+
+            // Camera and timing
+            camera,                // Controllable orbit camera
+            last_generation: Instant::now(), // Timing timestamp
