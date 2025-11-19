@@ -876,3 +876,13 @@ impl InstanceApp {
 
     /// Rebuilds the whole simulation with the pending settings (grid size,
     /// spacing, etc.). Called when the user clicks "Apply and Restart": create a
+    /// fresh app with the new settings, then move its buffers/pipelines over.
+    fn rebuild(&mut self, context: &Context) {
+        let new_app = Self::create_with_settings(context, self.pending_settings.clone());
+        self.vertex_buffer = new_app.vertex_buffer;
+        self.instance_buffer = new_app.instance_buffer;
+        self.index_buffer = new_app.index_buffer;
+        self.num_indices = new_app.num_indices;
+        self.num_instances = new_app.num_instances;
+        self.bind_group = new_app.bind_group;
+        self.sphere_vertex_buffer = new_app.sphere_vertex_buffer;
