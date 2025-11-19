@@ -866,3 +866,13 @@ impl InstanceApp {
             num_sphere_indices: sphere_indices.len() as u32,
             sphere_render_pipeline,
 
+            // User settings
+            settings: settings.clone(),        // Currently applied settings
+            pending_settings: settings,        // Settings edited in the UI
+            needs_rebuild: false,              // Rebuild-needed flag
+            paused: false,                     // Pause/play state
+        }
+    }
+
+    /// Rebuilds the whole simulation with the pending settings (grid size,
+    /// spacing, etc.). Called when the user clicks "Apply and Restart": create a
