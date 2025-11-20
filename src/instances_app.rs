@@ -886,3 +886,13 @@ impl InstanceApp {
         self.num_instances = new_app.num_instances;
         self.bind_group = new_app.bind_group;
         self.sphere_vertex_buffer = new_app.sphere_vertex_buffer;
+        self.sphere_index_buffer = new_app.sphere_index_buffer;
+        self.num_sphere_indices = new_app.num_sphere_indices;
+        self.settings = self.pending_settings.clone();
+        self.needs_rebuild = false;
+    }
+
+    /// Updates the cloth and sphere colors in place, without rebuilding the
+    /// buffers. Regenerates the vertices with the new color and uploads them via
+    /// write_buffer (which is why those buffers carry COPY_DST). This is faster
+    /// and smoother for the user than a full rebuild.
