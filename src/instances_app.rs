@@ -896,3 +896,13 @@ impl InstanceApp {
     /// buffers. Regenerates the vertices with the new color and uploads them via
     /// write_buffer (which is why those buffers carry COPY_DST). This is faster
     /// and smoother for the user than a full rebuild.
+    fn update_colors(&mut self, context: &Context) {
+        let grid_size = round_grid_size(self.settings.grid_size);
+        let (new_vertices, _, _, _, _) = generate_grid(
+            context,
+            grid_size,
+            grid_size,
+            self.settings.spacing,
+            0.5,
+            self.settings.point_size,
+            self.pending_settings.cloth_color, // New color picked in the UI
