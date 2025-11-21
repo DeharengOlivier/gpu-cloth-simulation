@@ -916,3 +916,13 @@ impl InstanceApp {
 
         // Same for the central obstacle sphere.
         let (sphere_vertices, _) = create_sphere_vertices(0.4, self.pending_settings.sphere_color);
+        context.queue().write_buffer(
+            &self.sphere_vertex_buffer,
+            0,
+            bytemuck::cast_slice(&sphere_vertices),
+        );
+
+        // Record the applied colors in the settings.
+        self.settings.cloth_color = self.pending_settings.cloth_color;
+        self.settings.sphere_color = self.pending_settings.sphere_color;
+    }
