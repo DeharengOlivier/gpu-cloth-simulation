@@ -906,3 +906,13 @@ impl InstanceApp {
             0.5,
             self.settings.point_size,
             self.pending_settings.cloth_color, // New color picked in the UI
+        );
+        // Upload the recolored vertices into the existing GPU buffer.
+        context.queue().write_buffer(
+            &self.vertex_buffer,
+            0,  // Start of the buffer
+            bytemuck::cast_slice(&new_vertices),
+        );
+
+        // Same for the central obstacle sphere.
+        let (sphere_vertices, _) = create_sphere_vertices(0.4, self.pending_settings.sphere_color);
