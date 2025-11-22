@@ -934,3 +934,13 @@ impl App for InstanceApp {
         self.camera.input(input, context);
     }
 
+    fn render_gui(&mut self, egui_ctx: &egui::Context, context: &Context) {
+        // Control panel: colors, grid size, spacing, etc.
+        egui::Window::new("Cloth Settings").show(egui_ctx, |ui| {
+            // Pause/play button to stop or resume the simulation.
+            if ui.button(if self.paused { "▶ Resume" } else { "⏸ Pause" }).clicked() {
+                self.paused = !self.paused;
+            }
+            ui.separator();
+
+            // Cloth color picker.
