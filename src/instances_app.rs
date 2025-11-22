@@ -926,3 +926,11 @@ impl InstanceApp {
         self.settings.cloth_color = self.pending_settings.cloth_color;
         self.settings.sphere_color = self.pending_settings.sphere_color;
     }
+}
+
+impl App for InstanceApp {
+    fn input(&mut self, input: egui::InputState, context: &Context) {
+        // Forward user input (mouse, keyboard) to the orbit camera.
+        self.camera.input(input, context);
+    }
+
