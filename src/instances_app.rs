@@ -954,3 +954,13 @@ impl App for InstanceApp {
             // Sphere color picker.
             ui.label("Sphere color:");
             let mut sphere_color = self.pending_settings.sphere_color;
+            if ui.color_edit_button_rgb(&mut sphere_color).changed() {
+                self.pending_settings.sphere_color = sphere_color;
+                self.update_colors(context); // Apply the new color immediately
+            }
+
+            ui.separator();
+            ui.label("Settings (restart required):");
+
+            // Grid size slider (number of particles per side).
+            ui.horizontal(|ui| {
