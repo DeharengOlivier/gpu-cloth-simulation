@@ -944,3 +944,13 @@ impl App for InstanceApp {
             ui.separator();
 
             // Cloth color picker.
+            ui.label("Cloth color:");
+            let mut cloth_color = self.pending_settings.cloth_color;
+            if ui.color_edit_button_rgb(&mut cloth_color).changed() {
+                self.pending_settings.cloth_color = cloth_color;
+                self.update_colors(context); // Apply the new color immediately
+            }
+
+            // Sphere color picker.
+            ui.label("Sphere color:");
+            let mut sphere_color = self.pending_settings.sphere_color;
