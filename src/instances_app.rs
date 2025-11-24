@@ -964,3 +964,13 @@ impl App for InstanceApp {
 
             // Grid size slider (number of particles per side).
             ui.horizontal(|ui| {
+                ui.label("Grid size:");
+                let mut grid_val = self.pending_settings.grid_size as i32;
+                if ui.add(egui::Slider::new(&mut grid_val, 64..=512).step_by(64.0)).changed() {
+                    self.pending_settings.grid_size = grid_val as u32;
+                }
+            });
+            ui.label(format!("  → {} particles", self.pending_settings.grid_size * self.pending_settings.grid_size));
+
+            // Particle spacing slider.
+            ui.horizontal(|ui| {
