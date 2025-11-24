@@ -974,3 +974,13 @@ impl App for InstanceApp {
 
             // Particle spacing slider.
             ui.horizontal(|ui| {
+                ui.label("Spacing:");
+                ui.add(egui::Slider::new(&mut self.pending_settings.spacing, 0.002..=0.02).step_by(0.001));
+            });
+
+            // Visual particle size slider.
+            ui.horizontal(|ui| {
+                ui.label("Point size:");
+                ui.add(egui::Slider::new(&mut self.pending_settings.point_size, 0.001..=0.01).step_by(0.0005));
+            });
+
