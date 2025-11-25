@@ -994,3 +994,13 @@ impl App for InstanceApp {
             if settings_changed {
                 ui.colored_label(egui::Color32::YELLOW, "⚠️ Pending changes");
                 if ui.button("🔄 Apply and Restart").clicked() {
+                    self.rebuild(context); // Rebuild the whole simulation
+                }
+            }
+
+            ui.separator();
+            // Total number of simulated particles.
+            ui.label(format!("Particles: {}", self.num_instances));
+        });
+    }
+
