@@ -984,3 +984,13 @@ impl App for InstanceApp {
                 ui.add(egui::Slider::new(&mut self.pending_settings.point_size, 0.001..=0.01).step_by(0.0005));
             });
 
+            ui.separator();
+
+            // Warn when pending settings require a rebuild.
+            let settings_changed = self.pending_settings.grid_size != self.settings.grid_size
+                || self.pending_settings.spacing != self.settings.spacing
+                || self.pending_settings.point_size != self.settings.point_size;
+
+            if settings_changed {
+                ui.colored_label(egui::Color32::YELLOW, "⚠️ Pending changes");
+                if ui.button("🔄 Apply and Restart").clicked() {
