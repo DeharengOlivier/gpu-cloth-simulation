@@ -1014,3 +1014,13 @@ impl App for InstanceApp {
         let fixed_timestep = TAYME; // Fixed step (e.g. 0.0016 s)
         let mut accumulated_time = delta_time;
 
+        // Run as many fixed steps as needed to catch up with the real elapsed
+        // time (more steps when rendering is slower than the simulation rate).
+        while accumulated_time >= fixed_timestep {
+            // Command encoder for the compute pass.
+            let mut encoder = context.device().create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Compute Encoder"),
+            });
+
+            {
+                // Begin a compute pass to run the physics kernel.
