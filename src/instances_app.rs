@@ -1004,3 +1004,13 @@ impl App for InstanceApp {
         });
     }
 
+    fn update(&mut self, delta_time: f32, context: &Context) {
+        // Called every frame to advance the physics, using a fixed time step for
+        // numerical stability.
+        if self.paused {
+            return;
+        }
+
+        let fixed_timestep = TAYME; // Fixed step (e.g. 0.0016 s)
+        let mut accumulated_time = delta_time;
+
