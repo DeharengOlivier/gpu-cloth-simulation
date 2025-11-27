@@ -1024,3 +1024,13 @@ impl App for InstanceApp {
 
             {
                 // Begin a compute pass to run the physics kernel.
+                let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                    label: Some("Compute Pass"),
+                    timestamp_writes: None,
+                });
+
+                // Select the physics compute pipeline.
+                compute_pass.set_pipeline(&self.compute_pipeline);
+                // Bind the current ping (or pong) bind group.
+                compute_pass.set_bind_group(0, &self.bind_group[0], &[]);
+                // Dispatch one workgroup per WORKGROUP_SIZE particles.
