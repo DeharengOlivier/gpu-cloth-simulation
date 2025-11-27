@@ -1034,3 +1034,13 @@ impl App for InstanceApp {
                 // Bind the current ping (or pong) bind group.
                 compute_pass.set_bind_group(0, &self.bind_group[0], &[]);
                 // Dispatch one workgroup per WORKGROUP_SIZE particles.
+                compute_pass.dispatch_workgroups(self.num_instances / WORKGROUP_SIZE, 1, 1);
+            }
+
+            // Submit the work to the GPU.
+            context.queue().submit(std::iter::once(encoder.finish()));
+
+            // Ping-pong swap: the buffer just written becomes the next read buffer.
+            self.instance_buffer.swap(0, 1);
+            self.bind_group.swap(0, 1);
+
