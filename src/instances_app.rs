@@ -1044,3 +1044,10 @@ impl App for InstanceApp {
             self.instance_buffer.swap(0, 1);
             self.bind_group.swap(0, 1);
 
+            // Consume one fixed step of accumulated time.
+            accumulated_time -= fixed_timestep;
+
+            // Record when this step ran.
+            self.last_generation = Instant::now();
+        }
+    }
