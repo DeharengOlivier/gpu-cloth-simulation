@@ -1051,3 +1051,13 @@ impl App for InstanceApp {
             self.last_generation = Instant::now();
         }
     }
+    fn render(&self, render_pass: &mut wgpu::RenderPass<'_>) {
+        // Draws the scene each frame.
+        // 1. Bind the camera (view/projection matrices).
+        render_pass.set_bind_group(0, self.camera.bind_group(), &[]);
+
+        // 2. Draw the cloth (all particles via instancing).
+        render_pass.set_pipeline(&self.render_pipeline);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // Mini-sphere geometry
+        render_pass.set_vertex_buffer(1, self.instance_buffer[0].slice(..)); // Particle positions
+        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
