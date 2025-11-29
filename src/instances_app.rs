@@ -1061,3 +1061,13 @@ impl App for InstanceApp {
         render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // Mini-sphere geometry
         render_pass.set_vertex_buffer(1, self.instance_buffer[0].slice(..)); // Particle positions
         render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.draw_indexed(0..self.num_indices, 0, 0..self.num_instances);
+
+        // 3. Draw the central obstacle sphere.
+        render_pass.set_pipeline(&self.sphere_render_pipeline);
+        render_pass.set_vertex_buffer(0, self.sphere_vertex_buffer.slice(..));
+        render_pass.set_index_buffer(self.sphere_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.draw_indexed(0..self.num_sphere_indices, 0, 0..1);
+    }
+}
+
