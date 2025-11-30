@@ -1080,3 +1080,8 @@ impl App for InstanceApp {
 // GPU device, surface, or the wgpu pipelines. The physics itself runs in a WGSL
 // compute shader and cannot be unit-tested here (see the README "Testing"
 // section for what that would require).
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem::{align_of, offset_of, size_of};
+
