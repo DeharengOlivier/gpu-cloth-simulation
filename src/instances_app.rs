@@ -1071,3 +1071,12 @@ impl App for InstanceApp {
     }
 }
 
+// ============================================================================
+// UNIT TESTS (CPU-ONLY)
+// ============================================================================
+//
+// These tests run under `cargo test` on any machine: they exercise only the
+// pure-CPU logic and the CPU/GPU struct-layout invariants. They do NOT touch a
+// GPU device, surface, or the wgpu pipelines. The physics itself runs in a WGSL
+// compute shader and cannot be unit-tested here (see the README "Testing"
+// section for what that would require).
