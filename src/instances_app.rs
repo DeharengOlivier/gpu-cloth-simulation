@@ -1085,3 +1085,10 @@ mod tests {
     use super::*;
     use std::mem::{align_of, offset_of, size_of};
 
+    // ---- CPU/GPU struct layout invariants ----
+    //
+    // The CPU uploads these structs to GPU buffers as raw bytes (bytemuck) and
+    // the WGSL side reads them back by byte offset, not by field name. A size or
+    // offset mismatch is a real, silent bug: the shader would read garbage. These
+    // tests pin the layout the WGSL declarations rely on.
+
