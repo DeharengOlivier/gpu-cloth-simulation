@@ -1092,3 +1092,13 @@ mod tests {
     // offset mismatch is a real, silent bug: the shader would read garbage. These
     // tests pin the layout the WGSL declarations rely on.
 
+    #[test]
+    fn vertex_layout_matches_shader() {
+        // shader.wgsl VertexInput: position/normal/color are each vec3<f32> read
+        // from the vertex buffer at offsets 0, 12, 24 (see Vertex::desc()).
+        // The struct is 3 x vec3<f32> = 9 floats = 36 bytes, 4-byte aligned.
+        assert_eq!(size_of::<Vertex>(), 36, "Vertex must be 9 f32 = 36 bytes");
+        assert_eq!(align_of::<Vertex>(), 4, "Vertex is f32-aligned");
+        assert_eq!(offset_of!(Vertex, position), 0);
+        assert_eq!(offset_of!(Vertex, normal), 12);
+        assert_eq!(offset_of!(Vertex, color), 24);
