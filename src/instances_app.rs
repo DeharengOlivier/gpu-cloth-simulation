@@ -1112,3 +1112,7 @@ mod tests {
         assert_eq!(desc.array_stride, size_of::<Vertex>() as wgpu::BufferAddress);
         assert_eq!(desc.attributes[0].offset, offset_of!(Vertex, position) as u64);
         assert_eq!(desc.attributes[1].offset, offset_of!(Vertex, normal) as u64);
+        assert_eq!(desc.attributes[2].offset, offset_of!(Vertex, color) as u64);
+    }
+
+    #[test]
