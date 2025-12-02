@@ -1102,3 +1102,13 @@ mod tests {
         assert_eq!(offset_of!(Vertex, position), 0);
         assert_eq!(offset_of!(Vertex, normal), 12);
         assert_eq!(offset_of!(Vertex, color), 24);
+    }
+
+    #[test]
+    fn vertex_desc_offsets_match_struct() {
+        // The hand-written byte offsets in Vertex::desc() must match the actual
+        // struct offsets, otherwise the GPU reads attributes from wrong locations.
+        let desc = Vertex::desc();
+        assert_eq!(desc.array_stride, size_of::<Vertex>() as wgpu::BufferAddress);
+        assert_eq!(desc.attributes[0].offset, offset_of!(Vertex, position) as u64);
+        assert_eq!(desc.attributes[1].offset, offset_of!(Vertex, normal) as u64);
