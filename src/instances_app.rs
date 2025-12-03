@@ -1116,3 +1116,13 @@ mod tests {
     }
 
     #[test]
+    fn instance_layout_matches_shader() {
+        // compute.wgsl Instance: position + speed are each vec4<f32> (std430:
+        // 16-byte aligned, 16-byte size). On the CPU they are [f32; 4]. So the
+        // struct is 32 bytes with speed at offset 16. The vec4 (with padding w)
+        // is what keeps the CPU and GPU layouts in agreement.
+        assert_eq!(size_of::<Instance>(), 32, "Instance must be 2 x vec4 = 32 bytes");
+        assert_eq!(align_of::<Instance>(), 4);
+        assert_eq!(offset_of!(Instance, position), 0);
+        assert_eq!(offset_of!(Instance, speed), 16, "speed must start at offset 16 (vec4 alignment)");
+    }
