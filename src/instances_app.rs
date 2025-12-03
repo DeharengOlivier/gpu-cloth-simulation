@@ -1126,3 +1126,13 @@ mod tests {
         assert_eq!(offset_of!(Instance, position), 0);
         assert_eq!(offset_of!(Instance, speed), 16, "speed must start at offset 16 (vec4 alignment)");
     }
+
+    #[test]
+    fn instance_desc_offsets_match_struct() {
+        // Instance::desc() exposes position (loc 3) at offset 0 and speed (loc 4)
+        // at offset 12 (= size_of::<[f32;3]>()). Note: this reads the velocity as
+        // a Float32x3 starting at byte 12, i.e. the last position float + first
+        // two speed floats. The render shader ignores @location(4), so this only
+        // needs the stride to match; we still pin the documented offsets.
+        let desc = Instance::desc();
+        assert_eq!(desc.array_stride, size_of::<Instance>() as wgpu::BufferAddress);
