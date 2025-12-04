@@ -1136,3 +1136,7 @@ mod tests {
         // needs the stride to match; we still pin the documented offsets.
         let desc = Instance::desc();
         assert_eq!(desc.array_stride, size_of::<Instance>() as wgpu::BufferAddress);
+        assert_eq!(desc.attributes[0].offset, 0);
+        assert_eq!(desc.attributes[1].offset, size_of::<[f32; 3]>() as u64);
+    }
+
