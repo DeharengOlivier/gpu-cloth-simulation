@@ -1140,3 +1140,13 @@ mod tests {
         assert_eq!(desc.attributes[1].offset, size_of::<[f32; 3]>() as u64);
     }
 
+    #[test]
+    fn physics_params_layout_matches_shader() {
+        // compute.wgsl PhysicsParams: 9 consecutive f32 scalars. On the CPU,
+        // #[repr(C)] packs them tightly into 36 bytes. Field ORDER is load-bearing
+        // (mapped by offset), so we pin each offset to catch any reordering.
+        assert_eq!(size_of::<PhysicsParams>(), 36, "9 f32 = 36 bytes");
+        assert_eq!(align_of::<PhysicsParams>(), 4);
+        assert_eq!(offset_of!(PhysicsParams, structural_k), 0);
+        assert_eq!(offset_of!(PhysicsParams, shear_k), 4);
+        assert_eq!(offset_of!(PhysicsParams, bend_k), 8);
