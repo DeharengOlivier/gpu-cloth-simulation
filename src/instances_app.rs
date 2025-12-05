@@ -1158,3 +1158,10 @@ mod tests {
         assert_eq!(offset_of!(PhysicsParams, sphere_radius), 32);
     }
 
+    #[test]
+    fn time_uniform_layout_matches_shader() {
+        // compute.wgsl TimeUniform: a single f32.
+        assert_eq!(size_of::<TimeUniform>(), 4);
+        assert_eq!(offset_of!(TimeUniform, generation_duration), 0);
+    }
+
