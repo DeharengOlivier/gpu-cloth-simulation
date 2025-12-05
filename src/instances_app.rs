@@ -1150,3 +1150,11 @@ mod tests {
         assert_eq!(offset_of!(PhysicsParams, structural_k), 0);
         assert_eq!(offset_of!(PhysicsParams, shear_k), 4);
         assert_eq!(offset_of!(PhysicsParams, bend_k), 8);
+        assert_eq!(offset_of!(PhysicsParams, damping), 12);
+        assert_eq!(offset_of!(PhysicsParams, mass), 16);
+        assert_eq!(offset_of!(PhysicsParams, rest_length), 20);
+        assert_eq!(offset_of!(PhysicsParams, dt), 24);
+        assert_eq!(offset_of!(PhysicsParams, friction), 28);
+        assert_eq!(offset_of!(PhysicsParams, sphere_radius), 32);
+    }
+
