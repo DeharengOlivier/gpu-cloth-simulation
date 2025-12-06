@@ -1165,3 +1165,13 @@ mod tests {
         assert_eq!(offset_of!(TimeUniform, generation_duration), 0);
     }
 
+    // ---- WORKGROUP_SIZE rounding of grid_size ----
+
+    #[test]
+    fn round_grid_size_rounds_down_to_multiple() {
+        // Exact multiples are unchanged.
+        assert_eq!(round_grid_size(256), 256);
+        assert_eq!(round_grid_size(512), 512);
+        // Non-multiples round DOWN to the nearest multiple of WORKGROUP_SIZE.
+        assert_eq!(round_grid_size(300), 256);
+        assert_eq!(round_grid_size(511), 256);
