@@ -1175,3 +1175,7 @@ mod tests {
         // Non-multiples round DOWN to the nearest multiple of WORKGROUP_SIZE.
         assert_eq!(round_grid_size(300), 256);
         assert_eq!(round_grid_size(511), 256);
+        assert_eq!(round_grid_size(513), 512);
+    }
+
+    #[test]
