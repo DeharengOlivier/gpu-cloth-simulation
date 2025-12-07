@@ -1179,3 +1179,11 @@ mod tests {
     }
 
     #[test]
+    fn round_grid_size_clamps_to_minimum_workgroup() {
+        // Anything below one full workgroup (including 0) clamps up to WORKGROUP_SIZE.
+        assert_eq!(round_grid_size(0), WORKGROUP_SIZE);
+        assert_eq!(round_grid_size(1), WORKGROUP_SIZE);
+        assert_eq!(round_grid_size(64), WORKGROUP_SIZE);
+        assert_eq!(round_grid_size(255), WORKGROUP_SIZE);
+    }
+
