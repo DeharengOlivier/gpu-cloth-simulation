@@ -1187,3 +1187,13 @@ mod tests {
         assert_eq!(round_grid_size(255), WORKGROUP_SIZE);
     }
 
+    #[test]
+    fn rounded_grid_yields_whole_number_of_workgroups() {
+        // The dispatch uses num_instances / WORKGROUP_SIZE. num_instances is
+        // grid_size * grid_size, so the per-side count being a multiple of
+        // WORKGROUP_SIZE guarantees the total is too (no particle left unprocessed).
+        for requested in [0u32, 1, 63, 64, 255, 256, 300, 512, 1000] {
+            let side = round_grid_size(requested);
+            let num_instances = side * side;
+            assert_eq!(
+                num_instances % WORKGROUP_SIZE,
