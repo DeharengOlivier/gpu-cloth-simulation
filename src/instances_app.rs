@@ -1197,3 +1197,9 @@ mod tests {
             let num_instances = side * side;
             assert_eq!(
                 num_instances % WORKGROUP_SIZE,
+                0,
+                "num_instances must be a whole multiple of WORKGROUP_SIZE for requested={requested}"
+            );
+        }
+    }
+
