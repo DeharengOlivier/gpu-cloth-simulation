@@ -1203,3 +1203,11 @@ mod tests {
         }
     }
 
+    // ---- Grid (instance) generation ----
+
+    #[test]
+    fn generate_instances_has_expected_count() {
+        let instances = generate_instances(4, 3, 0.01, 0.5);
+        assert_eq!(instances.len(), 4 * 3);
+    }
+
