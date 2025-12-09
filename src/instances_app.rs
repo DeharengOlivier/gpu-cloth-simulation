@@ -1211,3 +1211,13 @@ mod tests {
         assert_eq!(instances.len(), 4 * 3);
     }
 
+    #[test]
+    fn generate_instances_is_row_major() {
+        // index = row * cols + col. Check by reconstructing row/col from the
+        // centered X/Z coordinates of a few cells.
+        let rows = 3u32;
+        let cols = 5u32;
+        let spacing = 0.01f32;
+        let displacement = 0.5f32;
+        let instances = generate_instances(rows, cols, spacing, displacement);
+
