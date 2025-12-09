@@ -1221,3 +1221,13 @@ mod tests {
         let displacement = 0.5f32;
         let instances = generate_instances(rows, cols, spacing, displacement);
 
+        for row in 0..rows {
+            for col in 0..cols {
+                let i = (row * cols + col) as usize;
+                let expected_x = (col as f32 - cols as f32 / 2.0) * spacing;
+                let expected_z = (row as f32 - rows as f32 / 2.0) * spacing;
+                assert!((instances[i].position[0] - expected_x).abs() < 1e-9, "x at ({row},{col})");
+                assert_eq!(instances[i].position[1], displacement, "y (height) at ({row},{col})");
+                assert!((instances[i].position[2] - expected_z).abs() < 1e-9, "z at ({row},{col})");
+            }
+        }
