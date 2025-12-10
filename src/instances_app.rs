@@ -1231,3 +1231,13 @@ mod tests {
                 assert!((instances[i].position[2] - expected_z).abs() < 1e-9, "z at ({row},{col})");
             }
         }
+    }
+
+    #[test]
+    fn generate_instances_start_at_rest_with_padding() {
+        let instances = generate_instances(2, 2, 0.01, 0.5);
+        for inst in &instances {
+            // 4th position component is padding, must be 0.
+            assert_eq!(inst.position[3], 0.0, "position padding must be 0");
+            // Velocity is zero (and its padding too): every particle starts at rest.
+            assert_eq!(inst.speed, [0.0, 0.0, 0.0, 0.0]);
