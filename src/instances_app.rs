@@ -1241,3 +1241,7 @@ mod tests {
             assert_eq!(inst.position[3], 0.0, "position padding must be 0");
             // Velocity is zero (and its padding too): every particle starts at rest.
             assert_eq!(inst.speed, [0.0, 0.0, 0.0, 0.0]);
+        }
+    }
+
+    #[test]
