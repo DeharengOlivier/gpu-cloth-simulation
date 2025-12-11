@@ -1245,3 +1245,13 @@ mod tests {
     }
 
     #[test]
+    fn generate_instances_centering_offset() {
+        // The centering formula is (col - cols/2) * spacing, so the particle at
+        // col == cols/2 sits exactly on the X = 0 axis (likewise row for Z). Note
+        // this is NOT symmetric about the origin for an even side count: the grid
+        // is shifted by half a cell. This test pins that actual behavior.
+        let rows = 4u32;
+        let cols = 4u32;
+        let spacing = 0.01f32;
+        let instances = generate_instances(rows, cols, spacing, 0.5);
+
