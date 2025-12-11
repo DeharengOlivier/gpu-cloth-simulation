@@ -1255,3 +1255,13 @@ mod tests {
         let spacing = 0.01f32;
         let instances = generate_instances(rows, cols, spacing, 0.5);
 
+        // Cell (row=rows/2, col=cols/2) is the one placed on the origin axes.
+        let center_idx = ((rows / 2) * cols + (cols / 2)) as usize;
+        assert_eq!(instances[center_idx].position[0], 0.0, "col=cols/2 lies on X=0");
+        assert_eq!(instances[center_idx].position[2], 0.0, "row=rows/2 lies on Z=0");
+
+        // Extent along X spans (cols - 1) * spacing from first to last column.
+        let first_x = instances[0].position[0];
+        let last_x = instances[(cols - 1) as usize].position[0];
+        assert!(((last_x - first_x) - (cols as f32 - 1.0) * spacing).abs() < 1e-6);
+    }
