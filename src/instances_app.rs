@@ -1265,3 +1265,13 @@ mod tests {
         let last_x = instances[(cols - 1) as usize].position[0];
         assert!(((last_x - first_x) - (cols as f32 - 1.0) * spacing).abs() < 1e-6);
     }
+
+    #[test]
+    fn default_settings_grid_is_dispatch_safe() {
+        // The shipped default (256) must itself be a valid, workgroup-aligned grid.
+        let settings = ClothSettings::default();
+        let side = round_grid_size(settings.grid_size);
+        assert_eq!(side, 256);
+        assert_eq!((side * side) % WORKGROUP_SIZE, 0);
+    }
+}
