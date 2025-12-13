@@ -11,3 +11,10 @@ Built for the parallel-programming course at ECAM (Brussels).
 
 This is a **learning project**. I built it to get hands-on with two things at once: **parallel programming** (moving a physics solver onto thousands of GPU threads that all run at the same time, which forces you to design around data races, double-buffering and workgroups) and the **Rust** language (ownership, traits and zero-cost abstractions, plus the `wgpu`/WGSL ecosystem for talking to the GPU). The cloth is the excuse; the real goal was the GPU compute model and learning Rust.
 
+## What it demonstrates
+
+- A **mass-spring physical model** solved on the GPU rather than the CPU, so thousands of particles are integrated in parallel every frame.
+- A real **GPU compute pipeline** (WGSL compute shader) feeding a separate **render pipeline**, the two communicating through GPU storage buffers.
+- A **ping-pong buffer** scheme (read from `ping`, write to `pong`, then swap) to update particle state without read/write conflicts across parallel invocations.
+- Interactive tuning of the physics in real time through an [egui](https://github.com/emilk/egui) panel.
+
