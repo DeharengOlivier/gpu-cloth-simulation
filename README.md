@@ -18,3 +18,13 @@ This is a **learning project**. I built it to get hands-on with two things at on
 - A **ping-pong buffer** scheme (read from `ping`, write to `pong`, then swap) to update particle state without read/write conflicts across parallel invocations.
 - Interactive tuning of the physics in real time through an [egui](https://github.com/emilk/egui) panel.
 
+## The physics model
+
+Each cloth particle is a point mass linked to its neighbours by three families of springs (Hooke's law, with velocity damping to keep the system stable):
+
+- **Structural** springs (horizontal and vertical neighbours) hold the grid together.
+- **Shear** springs (diagonal neighbours) resist in-plane shearing.
+- **Bend** springs (two cells apart) resist folding.
+
+On top of the spring forces, the compute shader applies gravity, ground collision, collision against a sphere of configurable radius, friction, and a distance constraint that caps how far a spring can stretch (to avoid the cloth exploding at large time steps).
+
