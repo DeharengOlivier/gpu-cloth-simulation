@@ -28,3 +28,16 @@ Each cloth particle is a point mass linked to its neighbours by three families o
 
 On top of the spring forces, the compute shader applies gravity, ground collision, collision against a sphere of configurable radius, friction, and a distance constraint that caps how far a spring can stretch (to avoid the cloth exploding at large time steps).
 
+## Architecture
+
+```
+main.rs
+  └── sets up the wgpu-bootstrap Runner (window, device/queue, egui, frame loop)
+        └── InstanceApp (instances_app.rs)   the whole application
+              ├── Compute pipeline  ── compute.wgsl   physics step (spring forces + integration)
+              │     ├── instances_ping / instances_pong   particle state (position + velocity)
+              │     ├── TimeUniform        time step / duration
+              │     └── PhysicsParams      stiffness, damping, mass, rest length, sphere radius...
+              │
+              └── Render pipeline   ── shader.wgsl
+                    ├── draws the cloth grid (instanced from the simulated positions)
