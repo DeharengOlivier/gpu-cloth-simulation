@@ -41,3 +41,9 @@ main.rs
               │
               └── Render pipeline   ── shader.wgsl
                     ├── draws the cloth grid (instanced from the simulated positions)
+                    ├── draws the colliding sphere (icosphere)
+                    └── OrbitCamera (view + projection)
+```
+
+Each frame: the compute shader integrates one physics step into the `pong` buffer, the buffers are swapped, then the render pipeline draws the cloth and the sphere from the updated positions.
+
