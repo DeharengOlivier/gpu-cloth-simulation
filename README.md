@@ -47,3 +47,10 @@ main.rs
 
 Each frame: the compute shader integrates one physics step into the `pong` buffer, the buffers are swapped, then the render pipeline draws the cloth and the sphere from the updated positions.
 
+## Tech stack
+
+- **Rust** (edition 2021)
+- **wgpu** / **WebGPU** with **WGSL** shaders (one compute shader, one render shader)
+- [**wgpu-bootstrap**](https://github.com/qlurkin/wgpu-bootstrap) for window, device and frame-loop boilerplate
+- **egui** (real-time parameter UI), **cgmath** (3D math), **bytemuck** (CPU/GPU data layout)
+
