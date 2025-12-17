@@ -62,3 +62,7 @@ You need a recent [Rust toolchain](https://www.rust-lang.org/tools/install) and 
 git clone https://github.com/DeharengOlivier/<repo>.git
 cd <repo>
 cargo run --release
+```
+
+Use `--release`: the simulation is much smoother with optimizations on.
+
