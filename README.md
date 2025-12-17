@@ -58,3 +58,7 @@ Each frame: the compute shader integrates one physics step into the `pong` buffe
 
 You need a recent [Rust toolchain](https://www.rust-lang.org/tools/install) and a machine with a GPU that supports WebGPU (Vulkan, Metal or DX12).
 
+```bash
+git clone https://github.com/DeharengOlivier/<repo>.git
+cd <repo>
+cargo run --release
