@@ -66,3 +66,8 @@ cargo run --release
 
 Use `--release`: the simulation is much smoother with optimizations on.
 
+## Controls
+
+- **Orbit camera**: drag with the mouse to rotate, scroll to zoom.
+- **egui panel**: tune the physics live (spring stiffness for structural / shear / bend, damping, mass, rest length, time step, friction, sphere radius) and watch the cloth react.
+
