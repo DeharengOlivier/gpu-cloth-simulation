@@ -79,3 +79,7 @@ src/
 ├── instances_app.rs   application: buffers, pipelines, camera, egui, frame update
 ├── compute.wgsl       GPU physics step (spring forces, integration, collisions)
 └── shader.wgsl        GPU rendering (cloth grid + sphere)
+```
+
+## Testing
+
