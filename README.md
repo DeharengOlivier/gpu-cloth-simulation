@@ -108,3 +108,8 @@ This started as a course project, and there are several things I would tighten u
 - **Self-collision is not handled.** The cloth can pass through itself. Adding spatial hashing on the GPU for broad-phase self-collision would be the natural next step.
 - **Cloth resolution is square and clamped to multiples of the workgroup size.** Non-square cloths and arbitrary resolutions are not supported, and `grid_size` is silently rounded down to a multiple of `WORKGROUP_SIZE`. I would decouple the dispatch size from the grid dimensions.
 - **Workgroup size is fixed at 256 and untuned.** The optimal size is hardware-dependent; I would benchmark a few values (64/128/256) and consider a 2D workgroup layout that maps more naturally onto the 2D grid.
+- **Double-buffering correctness could be made more explicit.** The ping-pong swap is correct for the integration step, but because the same `instances_ping` buffer is read both for spring forces and for the distance constraints within one invocation, the constraint pass operates on pre-integration neighbour positions. Documenting (or restructuring) this ordering would remove a subtle source of confusion.
+
+## License
+
+Released under the MIT License. See [LICENSE](LICENSE).
