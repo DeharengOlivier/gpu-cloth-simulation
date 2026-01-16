@@ -1,4 +1,4 @@
-// Importe le module contenant notre application de simulation
+// Module holding the simulation application.
 mod instances_app;
 
 use std::sync::Arc;
@@ -7,56 +7,41 @@ use crate::instances_app::InstanceApp;
 use wgpu_bootstrap::{egui, Runner};
 
 fn main() {
-    // === QU'EST-CE QUE LE RUNNER ? ===
+    // The Runner (from wgpu_bootstrap) owns all the boilerplate needed to run a
+    // GPU application, so this file stays small:
     //
-    // Le Runner est un composant du framework wgpu_bootstrap qui gère TOUTE
-    // l'infrastructure nécessaire pour faire tourner une application GPU :
-    //
-    // 1. Création de la fenêtre (avec winit)
-    // 2. Initialisation de WebGPU/wgpu (device, queue, surface)
-    // 3. Boucle de rendu principale (game loop)
-    // 4. Gestion des événements (souris, clavier, redimensionnement)
-    // 5. Intégration d'egui (interface graphique)
-    // 6. Gestion du temps (delta_time, FPS)
-    //
-    // Sans le Runner, il faudrait écrire ~200 lignes de code boilerplate
-    // pour gérer tout ça manuellement.
-    
+    // 1. Window creation (winit)
+    // 2. WebGPU/wgpu initialization (device, queue, surface)
+    // 3. The main render/update loop
+    // 4. Event handling (mouse, keyboard, resize)
+    // 5. egui integration (the parameter UI)
+    // 6. Timing (delta_time, FPS)
+
     let mut runner = Runner::new(
-        "Simulation de Tissu GPU",
-        
-        // Largeur initiale de la fenêtre en pixels
+        "GPU Cloth Simulation",
+
+        // Initial window width in pixels.
         900,
-        
-        // Hauteur initiale de la fenêtre en pixels
+
+        // Initial window height in pixels.
         700,
-        
-        // Couleur de fond de l'interface egui (gris clair)
-        // Ceci n'affecte PAS le rendu 3D, seulement l'UI
+
+        // egui background color (light grey). Affects the UI only, not the 3D scene.
         egui::Color32::from_rgb(245, 245, 245),
-        
-        // Nombre de samples MSAA (antialiasing) - 32 = haute qualité
-        // Plus élevé = meilleure qualité mais plus lent
+
+        // MSAA sample count (anti-aliasing). Higher = smoother edges but more cost.
         32,
 
-        // Mode de présentation (0 = VSync activé, 1 = immédiat)
-        // 0 = synchronisé avec l'écran (60 FPS typique)
+        // Present mode (0 = VSync, 1 = immediate). VSync caps to the display refresh rate.
         0,
-        
-        // === FONCTION DE CRÉATION DE L'APP ===
-        //
-        // Box::new(|context| ...) est une closure (fonction anonyme) qui :
-        // 1. Reçoit le Context GPU (device, queue, format de surface)
-        // 2. Crée notre InstanceApp avec ce contexte
-        // 3. La met dans un Arc (pointeur partagé thread-safe)
-        //
-        // Le Runner appelle cette fonction UNE FOIS au démarrage pour
-        // initialiser notre application.
+
+        // App factory closure: the Runner calls it once at startup with the GPU
+        // Context (device, queue, surface format) and stores the resulting app in
+        // an Arc (thread-safe shared pointer).
         Box::new(|context| Arc::new(InstanceApp::new(context))),
     );
-    
-    // Lance la boucle de rendu infinie
-    // Cette fonction ne retourne JAMAIS (jusqu'à fermeture de la fenêtre)
-    // Elle appelle en boucle : update() → render() → render_gui()
+
+    // Enter the render loop. This does not return until the window is closed; it
+    // repeatedly calls update() -> render() -> render_gui().
     runner.run();
 }
