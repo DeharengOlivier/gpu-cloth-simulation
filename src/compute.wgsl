@@ -1,14 +1,20 @@
-//INSTANCES POSITION +VITESSE
+// One cloth particle's state. position.xyz / speed.xyz carry the data;
+// the w component is padding so the struct matches the std430 16-byte
+// alignment expected by the GPU (the host-side Instance uses [f32; 4] too).
 struct Instance {
     position: vec4<f32>,
     speed: vec4<f32>,
 };
-//jsp
+
+// Time uniform. Declared to match the bind group layout (binding 2) but not
+// read by the current simulation step.
 struct TimeUniform {
     generation_duration: f32,
 };
 
-//PARAMETRES POUR CALCUL FORCES
+// Simulation parameters shared by every invocation. Field ORDER must match the
+// host-side PhysicsParams struct, because the host/GPU mapping is by byte
+// offset, not by name (bytemuck, #[repr(C)]).
 struct PhysicsParams {
     structural_k: f32,
     shear_k: f32,
@@ -17,11 +23,13 @@ struct PhysicsParams {
     mass: f32,
     rest_length: f32,
     dt: f32,
-    friciton: f32,
+    friction: f32,
     sphere_radius: f32,
 };
 
-//ACCES AUX DONNEES POSITION+VITESSE, jsp, PARAMETRES
+// Bind group 0 for the compute pass. instances_ping is read, instances_pong is
+// written (ping-pong scheme: the host swaps which physical buffer is bound here
+// after every step, so this frame's output becomes next frame's input).
 @group(0) @binding(0) var<storage, read_write> instances_ping: array<Instance>;
 @group(0) @binding(1) var<storage, read_write> instances_pong: array<Instance>;
 @group(0) @binding(2) var<uniform> time: TimeUniform;
@@ -31,37 +39,46 @@ struct PhysicsParams {
 
 
 
-//CST FORCE GRAVITE ET POSITION SOL
-const GRAVITY: f32 = -0.3;      //-0.5
+// Downward gravity acceleration and the y-coordinate of the ground plane.
+const GRAVITY: f32 = -0.3;      // -0.5 also works; lower magnitude = slower fall
 const GROUND: f32 = -1.0;
+// Precomputed sqrt(2): diagonal (shear) springs have a rest length of
+// rest_length * sqrt(2) because the diagonal of a unit grid cell is sqrt(2).
 const sqrt_of_two: f32 = 1.41421356237309504880168872420969807856967187537694807317667973799073247846210703885038753432764157273501384623;
 
-//LOI HOOK (=CALCUL RESSORT): F=−k⋅(l−l0)
+// Hooke's law spring with velocity damping: F = -k * (length - rest_length) along
+// the spring axis, plus a damping term proportional to the relative velocity along
+// that same axis. Damping bleeds off energy so the cloth settles instead of
+// oscillating forever. Returns the force exerted on pos1 by the spring to pos2.
 fn calculate_spring_force(pos1: vec3<f32>, pos2: vec3<f32>, vel1: vec3<f32>, vel2: vec3<f32>, rest_length: f32, k: f32,  damping: f32) -> vec3<f32> {
     let delta = pos2 - pos1;
     let velocity_delta = vel2 - vel1;
     let current_length = length(delta);
 
+    // Guard against division by zero when two particles coincide.
     if (current_length < 0.0001) {
         return vec3<f32>(0.0);
     }
 
     let direction = delta / current_length;
 
-    //Force Ressort
+    // Elastic restoring force.
     let spring_force = k * (current_length - rest_length) * direction;
-    //Coefficient d'amortissement (Fd= -cd.v ) pour pas osciller
+    // Damping force (F = -c * v projected on the spring axis) to suppress oscillation.
     let damping_force = damping * dot(velocity_delta, direction) * direction;
 
     return spring_force + damping_force;
 }
 
 
-//LIAISON PROCHE PARTICULES (COMME MAILLAGE)
+// Positional (Jakobsen-style) constraint: if a spring is stretched beyond
+// rest_length * max_stretch, push both endpoints back along the axis (half the
+// correction each). This is a hard cap applied after integration to stop the
+// cloth from exploding when forces are large relative to the time step.
 fn enforce_distance_constraint(pos1: ptr<function, vec3<f32>>, pos2: ptr<function, vec3<f32>>, rest_length: f32, max_stretch: f32) {
     let delta = *pos2 - *pos1;
     let current_length = length(delta);
-    
+
     if current_length > rest_length * max_stretch {
         let correction = delta * (1.0 - (rest_length * max_stretch) / current_length);
         *pos1 += correction * 0.5;
@@ -74,29 +91,33 @@ fn enforce_distance_constraint(pos1: ptr<function, vec3<f32>>, pos2: ptr<functio
 
 
 
-//SHADER CALCUL PRINCIPAL
+// Main physics step. One invocation per particle: gather spring forces from its
+// grid neighbours, add gravity/damping, resolve collisions, integrate, then apply
+// the distance constraints. Reads from instances_ping, writes to instances_pong.
 @compute @workgroup_size(WORKGROUP_SIZE)
 fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let index = global_id.x;
     var instance = instances_ping[index];
 
-    //TAILLE MAX ETIREMENT DU TISSU
+    // Maximum allowed stretch factor for the distance constraint (see end of function).
     let max_stretch = 100.0; // Allow 10% stretch
 
-    //LOCALISATION PARTICULE DS GRILLE
+    // Recover the particle's (row, col) in the NxN grid. The grid is square, so
+    // its side length is sqrt(total particle count).
     let grid_size = u32(sqrt(f32(arrayLength(&instances_ping))));
     let row = index / grid_size;
     let col = index % grid_size;
 
-    //LOCALISATION PARTICULE DS ESPACE
+    // Current world-space state of this particle, plus the force accumulator.
     let pos = instance.position.xyz;
     let speed = instance.speed.xyz;
     var total_force = vec3<f32>(0.0, 0.0, 0.0);
 
 
-    //RESSORT VIA LOI HOOK
-    //RESSORT STRUCTUREL POUR RELIER PARTICULE AVEC VOISINS (GAUCHE, DROITE, BAS, HAUT)
-    // Voisin gauche
+    // --- Spring forces (Hooke's law) ---
+    // Structural springs connect each particle to its 4 direct neighbours
+    // (left, right, up, down). Boundary checks skip neighbours off the grid edge.
+    // Left neighbour
     if (col > 0) {
         let left_index = index - 1;
         let left_pos = instances_ping[left_index].position.xyz;
@@ -104,7 +125,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, left_pos, speed, left_speed, physics.rest_length, physics.structural_k, physics.damping);  
     }
 
-    //Voisin droit
+    // Right neighbour
     if (col < grid_size - 1) {
         let right_index = index + 1;
         let right_pos = instances_ping[right_index].position.xyz;
@@ -112,7 +133,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, right_pos, speed, right_speed, physics.rest_length, physics.structural_k, physics.damping);
     }
 
-    //Voisin haut
+    // Top neighbour
     if (row > 0) {
         let up_index = index - grid_size;
         let up_pos = instances_ping[up_index].position.xyz;
@@ -120,7 +141,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, up_pos, speed, up_speed, physics.rest_length, physics.structural_k, physics.damping);
     }
 
-    //Voisin bas
+    // Bottom neighbour
     if (row < grid_size - 1) {
         let down_index = index + grid_size;
         let down_pos = instances_ping[down_index].position.xyz;
@@ -129,8 +150,9 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
 
-    //RESSORTS DE CISAILLEMENT POUR RELIER PARTICULE AVEC VOISINS(DIAGONALES)
-    //Diagonale haut-gauche
+    // Shear springs connect each particle to its 4 diagonal neighbours and resist
+    // in-plane shearing. Their rest length is rest_length * sqrt(2) (the cell diagonal).
+    // Top-left diagonal
     if (row > 0 && col > 0) {
         let diag_index = index - grid_size - 1;
         let diag_pos = instances_ping[diag_index].position.xyz;
@@ -138,7 +160,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
     }
 
-    //Diagonale haut-droite
+    // Top-right diagonal
     if (row > 0 && col < grid_size - 1) {
         let diag_index = index - grid_size + 1;
         let diag_pos = instances_ping[diag_index].position.xyz;
@@ -146,7 +168,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
     }
 
-    //Diagonale bas-gauche
+    // Bottom-left diagonal
     if (row < grid_size - 1 && col > 0) {
         let diag_index = index + grid_size - 1;
         let diag_pos = instances_ping[diag_index].position.xyz;
@@ -154,7 +176,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
     }
 
-    //Diagonale bas-droite
+    // Bottom-right diagonal
     if (row < grid_size - 1 && col < grid_size - 1) {
         let diag_index = index + grid_size + 1;
         let diag_pos = instances_ping[diag_index].position.xyz;
@@ -162,8 +184,10 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
     }
 
-    //RESSORTS FLEXION POUR STABILITE ET RIGIDITE DU MAILLAGE
-    //Horizontale gauche
+    // Bend springs connect each particle to the neighbour two cells away
+    // (rest length rest_length * 2). They resist folding and add stiffness so the
+    // sheet behaves like cloth rather than a loose net.
+    // Two cells to the left
     if (col > 1) {
         let bend_index = index - 2;
         let bend_pos = instances_ping[bend_index].position.xyz;
@@ -171,7 +195,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, bend_pos, speed, bend_speed, physics.rest_length * 2.0, physics.bend_k, physics.damping);
     }
 
-    //Horizontale droite
+    // Two cells to the right
     if (col < grid_size - 2) {
         let bend_index = index + 2;
         let bend_pos = instances_ping[bend_index].position.xyz;
@@ -179,7 +203,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, bend_pos, speed, bend_speed, physics.rest_length * 2.0, physics.bend_k, physics.damping);
     }
 
-    //Verticale-haut
+    // Two cells up
     if (row > 1) {
         let bend_index = index - (grid_size * 2);
         let bend_pos = instances_ping[bend_index].position.xyz;
@@ -187,7 +211,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         total_force += calculate_spring_force(pos, bend_pos, speed, bend_speed, physics.rest_length * 2.0, physics.bend_k, physics.damping);
     }
 
-    //Verticale-bas
+    // Two cells down
     if (row < grid_size - 2) {
         let bend_index = index + (grid_size * 2);
         let bend_pos = instances_ping[bend_index].position.xyz;
@@ -198,55 +222,57 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
 
 
-    //FORCE D AMORTISSEMENT
+    // Global velocity damping (air drag): bleeds energy out of the whole system.
     let damping_force = -physics.damping * instance.speed.xyz;
     total_force += damping_force;
 
-    //GRAVITE VERS BAS
+    // Gravity (weight = mass * g, applied on the y axis).
     total_force += vec3<f32>(0.0, GRAVITY * physics.mass, 0.0);
 
 
-    //COLLISION TISSU-SPHERE AVEC FORCE DE FROTTEMENT (TG A LA SURFACE DE SPHERE)
+    // --- Collision with the central sphere (centred at the origin) ---
+    // If the particle is inside the sphere, project it back onto the surface and
+    // apply Coulomb friction tangent to the surface.
     let distance = length(instance.position.xyz);
     let radius = physics.sphere_radius;
-    
+
     if (distance < radius) {
         let normal = normalize(instance.position.xyz);
-        
-        //Repositionnement sur Surface Sphère
+
+        // Snap the particle back onto the sphere surface along the outward normal.
         instance.position.x = normal.x * radius;
         instance.position.y = normal.y * radius;
         instance.position.z = normal.z * radius;
 
 
-        //FORCE FROTTEMENT (=Ff=−min(∣Rot∣,cf∣Ron∣)1t)
-        //Resultante +Vecteur normal (centre de la sphère au point)
+        // Coulomb friction: Ff = -min(|F_t|, cf * |F_n|) * t_hat, where F is split
+        // into normal (F_n) and tangential (F_t) components relative to the surface.
         let Ro = total_force;
         let In = normal;
-        
-        //Composante normale (Ro.n)
+
+        // Normal component of the accumulated force.
         let Ro_n_magnitude = dot(Ro, In);
         let Ro_n = In * Ro_n_magnitude;
-        
-        //Composante tangentielle (Ro.t)
+
+        // Tangential component (what friction opposes).
         let Ro_t = Ro - Ro_n;
         let Ro_t_magnitude = length(Ro_t);
-        
-        //Si Composante tangentielle pas nulle
+
+        // Only apply friction when there is a non-negligible tangential force.
         if (Ro_t_magnitude > 0.0001) {
             let It = Ro_t / Ro_t_magnitude;
-            
-            //Coefficient de frottement
-            let cf = 0.9; // Ajustez cette valeur selon vos besoins
-            
-            //Force forttement
+
+            // Friction coefficient (kept local; not driven by PhysicsParams.friction yet).
+            let cf = 0.9;
+
+            // Friction force opposes the tangential motion, capped by cf * |F_n|.
             let friction_magnitude = min(Ro_t_magnitude, cf * abs(Ro_n_magnitude));
             let friction_force = -friction_magnitude * It;
-        
+
             total_force += friction_force;
         }
 
-        //VITESSE AVEC AMORTISSEMENT
+        // Reflect the velocity about the surface normal and damp it (inelastic bounce).
         let damping = 0.5;
         let dot_product = dot(instance.speed.xyz, normal);
         instance.speed.x = (instance.speed.x - 2.0 * dot_product * normal.x) * damping;
@@ -257,27 +283,31 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
 
 
-    //COLLISION SOL
-    //Position Sol
+    // --- Ground collision ---
+    // Clamp the particle to the ground plane and damp its downward velocity.
     if (instance.position.y < GROUND) {
         instance.position.y = GROUND;
         let ground_damping = 0.2;
         instance.speed.y = -instance.speed.y * ground_damping;
     }
 
-    //Update Vitesse
+    // Semi-implicit (symplectic) Euler integration: update velocity from the net
+    // force, then advance position using the new velocity.
     let acceleration = total_force / physics.mass;
     instance.speed.x += acceleration.x * physics.dt;
     instance.speed.y += acceleration.y * physics.dt;
     instance.speed.z += acceleration.z * physics.dt;
 
-    //Update Position
+    // Position update.
     instance.position.x += instance.speed.x * physics.dt;
     instance.position.y += instance.speed.y * physics.dt;
     instance.position.z += instance.speed.z * physics.dt;
 
-    //Contraintes de distance avec Voisins
-    //Voisin gauche
+    // --- Distance constraints with neighbours ---
+    // After integration, hard-cap how far each spring may stretch. NOTE: pos2 is
+    // read from instances_ping (this frame's input) and the correction to pos2 is
+    // discarded; only this particle's position (pos1) is written back.
+    // Left neighbour
     if (col > 0) {
         var pos1 = instance.position.xyz;
         var pos2 = instances_ping[index - 1].position.xyz;
@@ -287,7 +317,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         instance.position.z = pos1.z;
 
     }
-    //Voisin droit
+    // Right neighbour
     if (col < grid_size - 1) {
         var pos1 = instance.position.xyz;
         var pos2 = instances_ping[index + 1].position.xyz;
@@ -296,7 +326,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         instance.position.y = pos1.y;
         instance.position.z = pos1.z;
     }
-    //Voisin haut
+    // Top neighbour
     if (row > 0) {
         var pos1 = instance.position.xyz;
         var pos2 = instances_ping[index - grid_size].position.xyz;
@@ -305,7 +335,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         instance.position.y = pos1.y;
         instance.position.z = pos1.z;
     }
-    // Voisin bas
+    // Bottom neighbour
     if (row < grid_size - 1) {
         var pos1 = instance.position.xyz;
         var pos2 = instances_ping[index + grid_size].position.xyz;
@@ -314,7 +344,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         instance.position.y = pos1.y;
         instance.position.z = pos1.z;
     }
-    //Voisin Diagonale haut-gauche
+    // Top-left diagonal neighbour
     if (row > 0 && col > 0) {
         var pos1 = instance.position.xyz;
         var pos2 = instances_ping[index - grid_size - 1].position.xyz;
@@ -323,7 +353,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         instance.position.y = pos1.y;
         instance.position.z = pos1.z;
     }
-    //Voisin Diagonale haut-doite
+    // Top-right diagonal neighbour
     if (row > 0 && col < grid_size - 1) {
         var pos1 = instance.position.xyz;
         var pos2 = instances_ping[index - grid_size + 1].position.xyz;
@@ -332,7 +362,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         instance.position.y = pos1.y;
         instance.position.z = pos1.z;
     }
-     //Voisin Diagonale bas-gauche
+    // Bottom-left diagonal neighbour
     if (row < grid_size - 1 && col > 0) {
         var pos1 = instance.position.xyz;
         var pos2 = instances_ping[index + grid_size - 1].position.xyz;
@@ -341,7 +371,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         instance.position.y = pos1.y;
         instance.position.z = pos1.z;
     }
-     //Voisin Diagonale bas-droite
+    // Bottom-right diagonal neighbour
     if (row < grid_size - 1 && col < grid_size - 1) {
         var pos1 = instance.position.xyz;
         var pos2 = instances_ping[index + grid_size + 1].position.xyz;
@@ -352,5 +382,6 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
 
+    // Write the updated state into the output buffer for this step.
     instances_pong[index] = instance;
 }
