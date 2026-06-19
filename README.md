@@ -74,6 +74,21 @@ src/
 └── shader.wgsl        GPU rendering (cloth grid + sphere)
 ```
 
+## Limitations and how I would improve this
+
+This started as a course project, and there are several things I would tighten up before calling it production-grade:
+
+- **No automated tests or benchmarks.** Correctness and performance are only verified by eye. I would add a headless mode (run the compute pass without a window) that steps the simulation a fixed number of times and checks invariants (total energy bounded, no NaNs, particles stay within the distance constraint), plus a benchmark that reports steps/second for a given grid size.
+- **Magic numbers should be named constants.** Values like the stiffness multipliers (`4000.0 * 1.5`), the local friction coefficient `cf = 0.9` in the shader, the ground and sphere damping factors (`0.2`, `0.5`), `GRAVITY`, and the initial cloth height `0.5` are scattered across the code. They should be named constants or, better, surfaced as part of the simulation config.
+- **Simulation parameters are not fully centralized.** `PhysicsParams` is built inline in the constructor and the egui panel only exposes a subset (colors, grid size, spacing, point size). Stiffness, damping, mass, friction and sphere radius are defined but not editable at runtime even though the README advertises them. I would move all of these into a single config struct and wire every field to the UI.
+- **The friction coefficient is duplicated.** `PhysicsParams.friction` exists and is uploaded to the GPU, but the compute shader actually uses a hard-coded local `cf = 0.9` instead of reading `physics.friction`. The uniform field is effectively dead. I would make the shader read the uniform so the value has a single source of truth.
+- **A few WGSL bindings are unused.** The `TimeUniform` (binding 2) and the `instances` storage binding in the render shader are declared but never read. They should either be used or removed to make the data flow obvious.
+- **The distance-constraint pass is asymmetric.** Each invocation corrects only its own position and reads its neighbours from the read buffer; the neighbour-side correction computed by `enforce_distance_constraint` is discarded. This is a deliberate simplification to stay race-free in a single pass, but it makes the constraint softer and order-dependent. A cleaner approach would be a separate constraint-relaxation pass (Gauss-Seidel/Jacobi style) with its own ping-pong step.
+- **Self-collision is not handled.** The cloth can pass through itself. Adding spatial hashing on the GPU for broad-phase self-collision would be the natural next step.
+- **Cloth resolution is square and clamped to multiples of the workgroup size.** Non-square cloths and arbitrary resolutions are not supported, and `grid_size` is silently rounded down to a multiple of `WORKGROUP_SIZE`. I would decouple the dispatch size from the grid dimensions.
+- **Workgroup size is fixed at 256 and untuned.** The optimal size is hardware-dependent; I would benchmark a few values (64/128/256) and consider a 2D workgroup layout that maps more naturally onto the 2D grid.
+- **Double-buffering correctness could be made more explicit.** The ping-pong swap is correct for the integration step, but because the same `instances_ping` buffer is read both for spring forces and for the distance constraints within one invocation, the constraint pass operates on pre-integration neighbour positions. Documenting (or restructuring) this ordering would remove a subtle source of confusion.
+
 ## License
 
 Released under the MIT License. See [LICENSE](LICENSE).
