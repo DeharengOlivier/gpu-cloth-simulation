@@ -74,11 +74,25 @@ src/
 └── shader.wgsl        GPU rendering (cloth grid + sphere)
 ```
 
+## Testing
+
+```bash
+cargo test
+```
+
+`cargo test` runs a small suite of **CPU-only** unit tests (in `src/instances_app.rs`). They need no GPU, window, or surface, so they run anywhere the project compiles, including CI. They cover:
+
+- **CPU/GPU struct-layout invariants.** Using `std::mem::size_of` / `align_of` / `offset_of!`, the tests pin the size and field offsets of `Vertex`, `Instance`, `TimeUniform`, and `PhysicsParams`, and check that the byte offsets declared in `Vertex::desc()` / `Instance::desc()` match the actual struct layout. These structs are uploaded to the GPU as raw bytes (`bytemuck`) and read back by the WGSL shaders **by byte offset, not by field name**, so a size or field-order mismatch is a real, silent bug class. The tests encode the layout the WGSL declarations rely on (for example `Instance` = two `vec4<f32>` = 32 bytes with `speed` at offset 16, and the nine `f32` fields of `PhysicsParams` in their exact order).
+- **`WORKGROUP_SIZE` rounding of `grid_size`.** `round_grid_size` rounds a requested side length down to a multiple of `WORKGROUP_SIZE` and clamps it to at least one full workgroup; the tests check the rounding, the clamp (including 0), and that the resulting particle count (`side * side`) is always a whole multiple of `WORKGROUP_SIZE` so the compute dispatch leaves no particle unprocessed.
+- **Cloth grid generation.** `generate_instances` (the pure-CPU part of `generate_grid`) is tested for particle count, row-major ordering (`index = row * cols + col`), the documented centering offset, the padding component being zero, and every particle starting at rest.
+
+**What `cargo test` does NOT cover (honest scope):** the physics itself runs in a WGSL compute shader on the GPU and is **not** unit-tested here. Spring forces, integration, collisions, and the distance constraints are validated **visually** by running the simulation. Testing them automatically would require a **headless GPU harness**: create a `wgpu` device without a surface, run the compute pass for a fixed number of steps, read the buffers back, and assert invariants (no NaNs, bounded energy, particles staying within the distance constraint). That harness does not exist yet and would need an actual GPU (or a software adapter such as `llvmpipe`/WARP) available in CI, so it is out of scope for the current `cargo test`.
+
 ## Limitations and how I would improve this
 
 This started as a course project, and there are several things I would tighten up before calling it production-grade:
 
-- **No automated tests or benchmarks.** Correctness and performance are only verified by eye. I would add a headless mode (run the compute pass without a window) that steps the simulation a fixed number of times and checks invariants (total energy bounded, no NaNs, particles stay within the distance constraint), plus a benchmark that reports steps/second for a given grid size.
+- **GPU physics has no automated tests or benchmarks.** CPU logic and CPU/GPU struct-layout invariants are now covered by `cargo test` (see the Testing section), but the simulation itself is still only verified by eye. I would add a headless mode (run the compute pass without a window) that steps the simulation a fixed number of times and checks invariants (total energy bounded, no NaNs, particles stay within the distance constraint), plus a benchmark that reports steps/second for a given grid size.
 - **Magic numbers should be named constants.** Values like the stiffness multipliers (`4000.0 * 1.5`), the local friction coefficient `cf = 0.9` in the shader, the ground and sphere damping factors (`0.2`, `0.5`), `GRAVITY`, and the initial cloth height `0.5` are scattered across the code. They should be named constants or, better, surfaced as part of the simulation config.
 - **Simulation parameters are not fully centralized.** `PhysicsParams` is built inline in the constructor and the egui panel only exposes a subset (colors, grid size, spacing, point size). Stiffness, damping, mass, friction and sphere radius are defined but not editable at runtime even though the README advertises them. I would move all of these into a single config struct and wire every field to the UI.
 - **The friction coefficient is duplicated.** `PhysicsParams.friction` exists and is uploaded to the GPU, but the compute shader actually uses a hard-coded local `cf = 0.9` instead of reading `physics.friction`. The uniform field is effectively dead. I would make the shader read the uniform so the value has a single source of truth.

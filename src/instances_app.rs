@@ -272,25 +272,8 @@ fn generate_grid(
         });
 
     // Build the particle grid: one Instance (position + velocity) per particle,
-    // centered on the origin.
-    let instances: Vec<Instance> = (0..rows)
-        .flat_map(|row| {
-            (0..cols).map(move |col| {
-                Instance {
-                    position: [
-                        // X: centered, spaced by 'spacing'
-                        (col as f32 - cols as f32 / 2.0) * spacing,
-                        // Y: initial height
-                        displacement,
-                        // Z: centered, spaced by 'spacing'
-                        (row as f32 - rows as f32 / 2.0) * spacing,
-                        0.0, // Padding (vec4 alignment)
-                    ],
-                    speed: [0.0, 0.0, 0.0, 0.0], // Start at rest
-                }
-            })
-        })
-        .collect();
+    // centered on the origin. (Pure-CPU logic, see generate_instances.)
+    let instances: Vec<Instance> = generate_instances(rows, cols, spacing, displacement);
 
     // Identical copy used to initialize the second ping-pong buffer (see below).
     let instances_copy = instances.clone();
@@ -320,6 +303,44 @@ const WORKGROUP_SIZE: u32 = 256;
 // ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/// Rounds a requested grid side length down to a multiple of WORKGROUP_SIZE and
+/// clamps it to at least one full workgroup.
+///
+/// The compute dispatch covers `grid_size / WORKGROUP_SIZE` workgroups of
+/// WORKGROUP_SIZE threads each, so the side length must be a whole multiple of
+/// WORKGROUP_SIZE for every particle to be processed (and never zero). This is
+/// pure integer arithmetic, extracted so it can be unit-tested without a GPU.
+fn round_grid_size(grid_size: u32) -> u32 {
+    let rounded = (grid_size / WORKGROUP_SIZE) * WORKGROUP_SIZE;
+    rounded.max(WORKGROUP_SIZE) // Minimum one workgroup
+}
+
+/// Builds the per-particle instances (position + velocity) for an `rows` x `cols`
+/// grid centered on the origin, at height `displacement`, with the given spacing.
+///
+/// This is the pure-CPU part of `generate_grid` (no GPU device needed), separated
+/// so the grid layout can be unit-tested. Behavior is identical to the original
+/// inline loop: row-major order (index = row * cols + col), centered on X/Z, the
+/// 4th position component is padding, and every particle starts at rest.
+fn generate_instances(rows: u32, cols: u32, spacing: f32, displacement: f32) -> Vec<Instance> {
+    (0..rows)
+        .flat_map(|row| {
+            (0..cols).map(move |col| Instance {
+                position: [
+                    // X: centered, spaced by 'spacing'
+                    (col as f32 - cols as f32 / 2.0) * spacing,
+                    // Y: initial height
+                    displacement,
+                    // Z: centered, spaced by 'spacing'
+                    (row as f32 - rows as f32 / 2.0) * spacing,
+                    0.0, // Padding (vec4 alignment)
+                ],
+                speed: [0.0, 0.0, 0.0, 0.0], // Start at rest
+            })
+        })
+        .collect()
+}
 
 /// Builds the vertices for the central obstacle sphere.
 ///
@@ -364,8 +385,7 @@ impl InstanceApp {
 
         // Round grid_size down to a multiple of WORKGROUP_SIZE so the dispatch
         // covers exactly all particles, then clamp to at least one workgroup.
-        let grid_size = (settings.grid_size / WORKGROUP_SIZE) * WORKGROUP_SIZE;
-        let grid_size = grid_size.max(WORKGROUP_SIZE); // Minimum 256
+        let grid_size = round_grid_size(settings.grid_size);
 
         // Generate the vertices (mini-sphere geometry) and instances (particles).
         let (vertices, index_buffer, instances, instances_copy, indices) = generate_grid(
@@ -877,8 +897,7 @@ impl InstanceApp {
     /// write_buffer (which is why those buffers carry COPY_DST). This is faster
     /// and smoother for the user than a full rebuild.
     fn update_colors(&mut self, context: &Context) {
-        let grid_size = (self.settings.grid_size / WORKGROUP_SIZE) * WORKGROUP_SIZE;
-        let grid_size = grid_size.max(WORKGROUP_SIZE);
+        let grid_size = round_grid_size(self.settings.grid_size);
         let (new_vertices, _, _, _, _) = generate_grid(
             context,
             grid_size,
@@ -1049,5 +1068,210 @@ impl App for InstanceApp {
         render_pass.set_vertex_buffer(0, self.sphere_vertex_buffer.slice(..));
         render_pass.set_index_buffer(self.sphere_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
         render_pass.draw_indexed(0..self.num_sphere_indices, 0, 0..1);
+    }
+}
+
+// ============================================================================
+// UNIT TESTS (CPU-ONLY)
+// ============================================================================
+//
+// These tests run under `cargo test` on any machine: they exercise only the
+// pure-CPU logic and the CPU/GPU struct-layout invariants. They do NOT touch a
+// GPU device, surface, or the wgpu pipelines. The physics itself runs in a WGSL
+// compute shader and cannot be unit-tested here (see the README "Testing"
+// section for what that would require).
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem::{align_of, offset_of, size_of};
+
+    // ---- CPU/GPU struct layout invariants ----
+    //
+    // The CPU uploads these structs to GPU buffers as raw bytes (bytemuck) and
+    // the WGSL side reads them back by byte offset, not by field name. A size or
+    // offset mismatch is a real, silent bug: the shader would read garbage. These
+    // tests pin the layout the WGSL declarations rely on.
+
+    #[test]
+    fn vertex_layout_matches_shader() {
+        // shader.wgsl VertexInput: position/normal/color are each vec3<f32> read
+        // from the vertex buffer at offsets 0, 12, 24 (see Vertex::desc()).
+        // The struct is 3 x vec3<f32> = 9 floats = 36 bytes, 4-byte aligned.
+        assert_eq!(size_of::<Vertex>(), 36, "Vertex must be 9 f32 = 36 bytes");
+        assert_eq!(align_of::<Vertex>(), 4, "Vertex is f32-aligned");
+        assert_eq!(offset_of!(Vertex, position), 0);
+        assert_eq!(offset_of!(Vertex, normal), 12);
+        assert_eq!(offset_of!(Vertex, color), 24);
+    }
+
+    #[test]
+    fn vertex_desc_offsets_match_struct() {
+        // The hand-written byte offsets in Vertex::desc() must match the actual
+        // struct offsets, otherwise the GPU reads attributes from wrong locations.
+        let desc = Vertex::desc();
+        assert_eq!(desc.array_stride, size_of::<Vertex>() as wgpu::BufferAddress);
+        assert_eq!(desc.attributes[0].offset, offset_of!(Vertex, position) as u64);
+        assert_eq!(desc.attributes[1].offset, offset_of!(Vertex, normal) as u64);
+        assert_eq!(desc.attributes[2].offset, offset_of!(Vertex, color) as u64);
+    }
+
+    #[test]
+    fn instance_layout_matches_shader() {
+        // compute.wgsl Instance: position + speed are each vec4<f32> (std430:
+        // 16-byte aligned, 16-byte size). On the CPU they are [f32; 4]. So the
+        // struct is 32 bytes with speed at offset 16. The vec4 (with padding w)
+        // is what keeps the CPU and GPU layouts in agreement.
+        assert_eq!(size_of::<Instance>(), 32, "Instance must be 2 x vec4 = 32 bytes");
+        assert_eq!(align_of::<Instance>(), 4);
+        assert_eq!(offset_of!(Instance, position), 0);
+        assert_eq!(offset_of!(Instance, speed), 16, "speed must start at offset 16 (vec4 alignment)");
+    }
+
+    #[test]
+    fn instance_desc_offsets_match_struct() {
+        // Instance::desc() exposes position (loc 3) at offset 0 and speed (loc 4)
+        // at offset 12 (= size_of::<[f32;3]>()). Note: this reads the velocity as
+        // a Float32x3 starting at byte 12, i.e. the last position float + first
+        // two speed floats. The render shader ignores @location(4), so this only
+        // needs the stride to match; we still pin the documented offsets.
+        let desc = Instance::desc();
+        assert_eq!(desc.array_stride, size_of::<Instance>() as wgpu::BufferAddress);
+        assert_eq!(desc.attributes[0].offset, 0);
+        assert_eq!(desc.attributes[1].offset, size_of::<[f32; 3]>() as u64);
+    }
+
+    #[test]
+    fn physics_params_layout_matches_shader() {
+        // compute.wgsl PhysicsParams: 9 consecutive f32 scalars. On the CPU,
+        // #[repr(C)] packs them tightly into 36 bytes. Field ORDER is load-bearing
+        // (mapped by offset), so we pin each offset to catch any reordering.
+        assert_eq!(size_of::<PhysicsParams>(), 36, "9 f32 = 36 bytes");
+        assert_eq!(align_of::<PhysicsParams>(), 4);
+        assert_eq!(offset_of!(PhysicsParams, structural_k), 0);
+        assert_eq!(offset_of!(PhysicsParams, shear_k), 4);
+        assert_eq!(offset_of!(PhysicsParams, bend_k), 8);
+        assert_eq!(offset_of!(PhysicsParams, damping), 12);
+        assert_eq!(offset_of!(PhysicsParams, mass), 16);
+        assert_eq!(offset_of!(PhysicsParams, rest_length), 20);
+        assert_eq!(offset_of!(PhysicsParams, dt), 24);
+        assert_eq!(offset_of!(PhysicsParams, friction), 28);
+        assert_eq!(offset_of!(PhysicsParams, sphere_radius), 32);
+    }
+
+    #[test]
+    fn time_uniform_layout_matches_shader() {
+        // compute.wgsl TimeUniform: a single f32.
+        assert_eq!(size_of::<TimeUniform>(), 4);
+        assert_eq!(offset_of!(TimeUniform, generation_duration), 0);
+    }
+
+    // ---- WORKGROUP_SIZE rounding of grid_size ----
+
+    #[test]
+    fn round_grid_size_rounds_down_to_multiple() {
+        // Exact multiples are unchanged.
+        assert_eq!(round_grid_size(256), 256);
+        assert_eq!(round_grid_size(512), 512);
+        // Non-multiples round DOWN to the nearest multiple of WORKGROUP_SIZE.
+        assert_eq!(round_grid_size(300), 256);
+        assert_eq!(round_grid_size(511), 256);
+        assert_eq!(round_grid_size(513), 512);
+    }
+
+    #[test]
+    fn round_grid_size_clamps_to_minimum_workgroup() {
+        // Anything below one full workgroup (including 0) clamps up to WORKGROUP_SIZE.
+        assert_eq!(round_grid_size(0), WORKGROUP_SIZE);
+        assert_eq!(round_grid_size(1), WORKGROUP_SIZE);
+        assert_eq!(round_grid_size(64), WORKGROUP_SIZE);
+        assert_eq!(round_grid_size(255), WORKGROUP_SIZE);
+    }
+
+    #[test]
+    fn rounded_grid_yields_whole_number_of_workgroups() {
+        // The dispatch uses num_instances / WORKGROUP_SIZE. num_instances is
+        // grid_size * grid_size, so the per-side count being a multiple of
+        // WORKGROUP_SIZE guarantees the total is too (no particle left unprocessed).
+        for requested in [0u32, 1, 63, 64, 255, 256, 300, 512, 1000] {
+            let side = round_grid_size(requested);
+            let num_instances = side * side;
+            assert_eq!(
+                num_instances % WORKGROUP_SIZE,
+                0,
+                "num_instances must be a whole multiple of WORKGROUP_SIZE for requested={requested}"
+            );
+        }
+    }
+
+    // ---- Grid (instance) generation ----
+
+    #[test]
+    fn generate_instances_has_expected_count() {
+        let instances = generate_instances(4, 3, 0.01, 0.5);
+        assert_eq!(instances.len(), 4 * 3);
+    }
+
+    #[test]
+    fn generate_instances_is_row_major() {
+        // index = row * cols + col. Check by reconstructing row/col from the
+        // centered X/Z coordinates of a few cells.
+        let rows = 3u32;
+        let cols = 5u32;
+        let spacing = 0.01f32;
+        let displacement = 0.5f32;
+        let instances = generate_instances(rows, cols, spacing, displacement);
+
+        for row in 0..rows {
+            for col in 0..cols {
+                let i = (row * cols + col) as usize;
+                let expected_x = (col as f32 - cols as f32 / 2.0) * spacing;
+                let expected_z = (row as f32 - rows as f32 / 2.0) * spacing;
+                assert!((instances[i].position[0] - expected_x).abs() < 1e-9, "x at ({row},{col})");
+                assert_eq!(instances[i].position[1], displacement, "y (height) at ({row},{col})");
+                assert!((instances[i].position[2] - expected_z).abs() < 1e-9, "z at ({row},{col})");
+            }
+        }
+    }
+
+    #[test]
+    fn generate_instances_start_at_rest_with_padding() {
+        let instances = generate_instances(2, 2, 0.01, 0.5);
+        for inst in &instances {
+            // 4th position component is padding, must be 0.
+            assert_eq!(inst.position[3], 0.0, "position padding must be 0");
+            // Velocity is zero (and its padding too): every particle starts at rest.
+            assert_eq!(inst.speed, [0.0, 0.0, 0.0, 0.0]);
+        }
+    }
+
+    #[test]
+    fn generate_instances_centering_offset() {
+        // The centering formula is (col - cols/2) * spacing, so the particle at
+        // col == cols/2 sits exactly on the X = 0 axis (likewise row for Z). Note
+        // this is NOT symmetric about the origin for an even side count: the grid
+        // is shifted by half a cell. This test pins that actual behavior.
+        let rows = 4u32;
+        let cols = 4u32;
+        let spacing = 0.01f32;
+        let instances = generate_instances(rows, cols, spacing, 0.5);
+
+        // Cell (row=rows/2, col=cols/2) is the one placed on the origin axes.
+        let center_idx = ((rows / 2) * cols + (cols / 2)) as usize;
+        assert_eq!(instances[center_idx].position[0], 0.0, "col=cols/2 lies on X=0");
+        assert_eq!(instances[center_idx].position[2], 0.0, "row=rows/2 lies on Z=0");
+
+        // Extent along X spans (cols - 1) * spacing from first to last column.
+        let first_x = instances[0].position[0];
+        let last_x = instances[(cols - 1) as usize].position[0];
+        assert!(((last_x - first_x) - (cols as f32 - 1.0) * spacing).abs() < 1e-6);
+    }
+
+    #[test]
+    fn default_settings_grid_is_dispatch_safe() {
+        // The shipped default (256) must itself be a valid, workgroup-aligned grid.
+        let settings = ClothSettings::default();
+        let side = round_grid_size(settings.grid_size);
+        assert_eq!(side, 256);
+        assert_eq!((side * side) % WORKGROUP_SIZE, 0);
     }
 }
