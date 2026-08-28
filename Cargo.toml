@@ -17,7 +17,7 @@ bytemuck = { version = "1.18", features = ["derive"] }
 # wgpu hands back an adapter and a device as futures. The headless constructor
 # has to be callable from a test, a benchmark and a plain program, none of which
 # run an async runtime, so it blocks on them with the smallest thing that can.
-pollster = "0.3"
+pollster = "1.0"
 
 [dev-dependencies]
 # The test harness talks to wgpu directly, with no window and no surface. Pinned
