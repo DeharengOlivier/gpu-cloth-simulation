@@ -19,6 +19,7 @@ struct PhysicsParams {
     dt: f32,
     friction: f32,
     sphere_radius: f32,
+    max_spring_stretch: f32,
 };
 
 // Bind group 0 for the compute pass. instances_ping is read, instances_pong is
@@ -64,24 +65,23 @@ fn calculate_spring_force(pos1: vec3<f32>, pos2: vec3<f32>, vel1: vec3<f32>, vel
 }
 
 
-// Positional (Jakobsen-style) constraint: if a spring is stretched beyond
-// rest_length * max_stretch, push both endpoints back along the axis (half the
-// correction each). This is a hard cap applied after integration to stop the
-// cloth from exploding when forces are large relative to the time step.
-fn enforce_distance_constraint(pos1: ptr<function, vec3<f32>>, pos2: ptr<function, vec3<f32>>, rest_length: f32, max_stretch: f32) {
-    let delta = *pos2 - *pos1;
+// Positional (Jakobsen-style) constraint, one endpoint at a time.
+//
+// If the spring is stretched past rest_length * max_stretch, this returns the
+// correction to apply to `pos1`: half the excess, along the spring axis. The
+// other half is applied by the neighbour's own invocation, which computes the
+// mirror of this. Returning the correction instead of mutating both endpoints
+// is what keeps a parallel pass free of write conflicts.
+fn distance_correction(pos1: vec3<f32>, pos2: vec3<f32>, rest_length: f32, max_stretch: f32) -> vec3<f32> {
+    let delta = pos2 - pos1;
     let current_length = length(delta);
+    let limit = rest_length * max_stretch;
 
-    if current_length > rest_length * max_stretch {
-        let correction = delta * (1.0 - (rest_length * max_stretch) / current_length);
-        *pos1 += correction * 0.5;
-        *pos2 -= correction * 0.5;
+    if current_length <= limit || current_length < 0.0001 {
+        return vec3<f32>(0.0);
     }
+    return delta * (1.0 - limit / current_length) * 0.5;
 }
-
-
-
-
 
 
 // Main physics step. One invocation per particle: gather spring forces from its
@@ -91,9 +91,6 @@ fn enforce_distance_constraint(pos1: ptr<function, vec3<f32>>, pos2: ptr<functio
 fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let index = global_id.x;
     var instance = instances_ping[index];
-
-    // Maximum allowed stretch factor for the distance constraint (see end of function).
-    let max_stretch = 100.0; // Allow 10% stretch
 
     // Recover the particle's (row, col) in the NxN grid. The grid is square, so
     // its side length is sqrt(total particle count).
@@ -296,85 +293,64 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     instance.position.y += instance.speed.y * physics.dt;
     instance.position.z += instance.speed.z * physics.dt;
 
-    // --- Distance constraints with neighbours ---
-    // After integration, hard-cap how far each spring may stretch. NOTE: pos2 is
-    // read from instances_ping (this frame's input) and the correction to pos2 is
-    // discarded; only this particle's position (pos1) is written back.
-    // Left neighbour
-    if (col > 0) {
-        var pos1 = instance.position.xyz;
-        var pos2 = instances_ping[index - 1].position.xyz;
-        enforce_distance_constraint(&pos1, &pos2, physics.rest_length, max_stretch);
-        instance.position.x = pos1.x;
-        instance.position.y = pos1.y;
-        instance.position.z = pos1.z;
-
-    }
-    // Right neighbour
-    if (col < grid_size - 1) {
-        var pos1 = instance.position.xyz;
-        var pos2 = instances_ping[index + 1].position.xyz;
-        enforce_distance_constraint(&pos1, &pos2, physics.rest_length, max_stretch);
-        instance.position.x = pos1.x;
-        instance.position.y = pos1.y;
-        instance.position.z = pos1.z;
-    }
-    // Top neighbour
-    if (row > 0) {
-        var pos1 = instance.position.xyz;
-        var pos2 = instances_ping[index - grid_size].position.xyz;
-        enforce_distance_constraint(&pos1, &pos2, physics.rest_length, max_stretch);
-        instance.position.x = pos1.x;
-        instance.position.y = pos1.y;
-        instance.position.z = pos1.z;
-    }
-    // Bottom neighbour
-    if (row < grid_size - 1) {
-        var pos1 = instance.position.xyz;
-        var pos2 = instances_ping[index + grid_size].position.xyz;
-        enforce_distance_constraint(&pos1, &pos2, physics.rest_length, max_stretch);
-        instance.position.x = pos1.x;
-        instance.position.y = pos1.y;
-        instance.position.z = pos1.z;
-    }
-    // Top-left diagonal neighbour
-    if (row > 0 && col > 0) {
-        var pos1 = instance.position.xyz;
-        var pos2 = instances_ping[index - grid_size - 1].position.xyz;
-        enforce_distance_constraint(&pos1, &pos2, physics.rest_length * sqrt_of_two, max_stretch);
-        instance.position.x = pos1.x;
-        instance.position.y = pos1.y;
-        instance.position.z = pos1.z;
-    }
-    // Top-right diagonal neighbour
-    if (row > 0 && col < grid_size - 1) {
-        var pos1 = instance.position.xyz;
-        var pos2 = instances_ping[index - grid_size + 1].position.xyz;
-        enforce_distance_constraint(&pos1, &pos2, physics.rest_length * sqrt_of_two, max_stretch);
-        instance.position.x = pos1.x;
-        instance.position.y = pos1.y;
-        instance.position.z = pos1.z;
-    }
-    // Bottom-left diagonal neighbour
-    if (row < grid_size - 1 && col > 0) {
-        var pos1 = instance.position.xyz;
-        var pos2 = instances_ping[index + grid_size - 1].position.xyz;
-        enforce_distance_constraint(&pos1, &pos2, physics.rest_length * sqrt_of_two, max_stretch);
-        instance.position.x = pos1.x;
-        instance.position.y = pos1.y;
-        instance.position.z = pos1.z;
-    }
-    // Bottom-right diagonal neighbour
-    if (row < grid_size - 1 && col < grid_size - 1) {
-        var pos1 = instance.position.xyz;
-        var pos2 = instances_ping[index + grid_size + 1].position.xyz;
-        enforce_distance_constraint(&pos1, &pos2, physics.rest_length * sqrt_of_two, max_stretch);
-        instance.position.x = pos1.x;
-        instance.position.y = pos1.y;
-        instance.position.z = pos1.z;
-    }
-
-
     // Write the updated state into the output buffer for this step.
+    instances_pong[index] = instance;
+}
+
+
+// Positional constraint pass, dispatched after computeMain.
+//
+// It is a separate pass on purpose. Folding it into the integration step meant
+// each invocation compared its own POST-integration position against its
+// neighbours' PRE-integration ones, so the correction was computed from a
+// configuration that never existed and the cap was overshot every step. Reading
+// both endpoints from the same buffer, after integration has been written to
+// it, is what makes the cap actually hold.
+@compute @workgroup_size(WORKGROUP_SIZE)
+fn constraintMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let index = global_id.x;
+    var instance = instances_ping[index];
+
+    let grid_size = u32(sqrt(f32(arrayLength(&instances_ping))));
+    let row = index / grid_size;
+    let col = index % grid_size;
+
+    let structural = physics.rest_length;
+    let shear = physics.rest_length * sqrt_of_two;
+    var correction = vec3<f32>(0.0);
+    let pos = instance.position.xyz;
+
+    // Structural neighbours.
+    if (col > 0) {
+        correction += distance_correction(pos, instances_ping[index - 1u].position.xyz, structural, physics.max_spring_stretch);
+    }
+    if (col < grid_size - 1u) {
+        correction += distance_correction(pos, instances_ping[index + 1u].position.xyz, structural, physics.max_spring_stretch);
+    }
+    if (row > 0u) {
+        correction += distance_correction(pos, instances_ping[index - grid_size].position.xyz, structural, physics.max_spring_stretch);
+    }
+    if (row < grid_size - 1u) {
+        correction += distance_correction(pos, instances_ping[index + grid_size].position.xyz, structural, physics.max_spring_stretch);
+    }
+
+    // Shear neighbours, whose rest length is the cell diagonal.
+    if (row > 0u && col > 0u) {
+        correction += distance_correction(pos, instances_ping[index - grid_size - 1u].position.xyz, shear, physics.max_spring_stretch);
+    }
+    if (row > 0u && col < grid_size - 1u) {
+        correction += distance_correction(pos, instances_ping[index - grid_size + 1u].position.xyz, shear, physics.max_spring_stretch);
+    }
+    if (row < grid_size - 1u && col > 0u) {
+        correction += distance_correction(pos, instances_ping[index + grid_size - 1u].position.xyz, shear, physics.max_spring_stretch);
+    }
+    if (row < grid_size - 1u && col < grid_size - 1u) {
+        correction += distance_correction(pos, instances_ping[index + grid_size + 1u].position.xyz, shear, physics.max_spring_stretch);
+    }
+
+    instance.position.x += correction.x;
+    instance.position.y += correction.y;
+    instance.position.z += correction.z;
+
     instances_pong[index] = instance;
 }

@@ -28,6 +28,33 @@ pub const FIXED_TIME_STEP_SECONDS: f32 = 0.0016;
 /// Height, in world units, at which the flat cloth is released.
 pub const INITIAL_CLOTH_HEIGHT: f32 = 0.5;
 
+/// How far a spring may stretch past its rest length before the positional
+/// constraint pulls its endpoints back.
+///
+/// The value is bracketed by two measurements taken over the whole range the UI
+/// offers (grid 256 and 512, spacing 0.002 to 0.02), with the constraint
+/// disabled:
+///
+/// - a sheet **at rest** stretches up to 1.365x under its own weight (grid 512,
+///   spacing 0.002, a shear spring). The cap must sit above that. A cap below it
+///   is unsatisfiable at rest, so the constraint fires on every step forever and
+///   the correction it feeds back into the velocity accumulates without bound:
+///   at 1.1 the sheet reached 5.2e4 units per second and went non-finite.
+/// - the **transient**, as the falling sheet snaps taut on the sphere, reaches
+///   3.04x. Real cloth does not stretch by 200%, so there is genuine work here.
+///
+/// 1.5 is the midpoint in spirit: 10% of headroom above the worst resting state,
+/// so the constraint never shapes the drape, and well under the transient, so it
+/// still clips it. A runaway passes it within a step or two.
+pub const MAX_SPRING_STRETCH: f32 = 1.5;
+
+/// Relaxation passes of the positional constraint per physics step.
+///
+/// One pass moves each endpoint half of its excess, so a single pass leaves a
+/// residue behind. The value below is the smallest that held the cap in the
+/// harness at the tightest spacing the UI offers; see `tests/physics.rs`.
+pub const CONSTRAINT_ITERATIONS: u32 = 2;
+
 /// One cloth particle, as both the CPU and the GPU see it.
 ///
 /// `#[repr(C)]` gives a stable layout so the two agree on field placement, and
@@ -70,6 +97,9 @@ pub struct PhysicsParams {
     pub friction: f32,
     /// Radius of the obstacle sphere, centred on the origin.
     pub sphere_radius: f32,
+    /// How far a spring may stretch past its rest length; see
+    /// [`MAX_SPRING_STRETCH`].
+    pub max_spring_stretch: f32,
 }
 
 /// Everything needed to build a simulation.
@@ -83,6 +113,18 @@ pub struct ClothConfig {
     pub initial_height: f32,
     /// Radius of the obstacle sphere.
     pub sphere_radius: f32,
+    /// Relaxation passes of the positional constraint per step.
+    ///
+    /// Defaults to [`CONSTRAINT_ITERATIONS`]. It is a field rather than a
+    /// constant so the harness can run the simulation with the constraint off
+    /// and compare, which is how the cap is shown to be doing anything.
+    pub constraint_iterations: u32,
+    /// How far a spring may stretch before the constraint pulls it back.
+    ///
+    /// Defaults to [`MAX_SPRING_STRETCH`]. It reaches the shader as a uniform
+    /// rather than a substituted literal, so a test can pick a cap the sheet
+    /// cannot satisfy and check the constraint stays bounded anyway.
+    pub max_spring_stretch: f32,
 }
 
 impl Default for ClothConfig {
@@ -92,6 +134,8 @@ impl Default for ClothConfig {
             spacing: 0.006,
             initial_height: INITIAL_CLOTH_HEIGHT,
             sphere_radius: 0.4,
+            constraint_iterations: CONSTRAINT_ITERATIONS,
+            max_spring_stretch: MAX_SPRING_STRETCH,
         }
     }
 }
@@ -112,6 +156,7 @@ impl ClothConfig {
             dt: FIXED_TIME_STEP_SECONDS,
             friction: 0.8,
             sphere_radius: self.sphere_radius,
+            max_spring_stretch: self.max_spring_stretch,
         }
     }
 }
@@ -155,10 +200,12 @@ pub fn generate_instances(rows: u32, cols: u32, spacing: f32, displacement: f32)
 pub struct ClothSimulation {
     buffers: [wgpu::Buffer; 2],
     bind_groups: [wgpu::BindGroup; 2],
-    pipeline: wgpu::ComputePipeline,
+    compute_pipeline: wgpu::ComputePipeline,
+    constraint_pipeline: wgpu::ComputePipeline,
     grid_size: u32,
     particle_count: u32,
     workgroups: u32,
+    constraint_iterations: u32,
 }
 
 impl ClothSimulation {
@@ -238,11 +285,7 @@ impl ClothSimulation {
             label: Some("Compute Shader"),
             // The literal WORKGROUP_SIZE in the WGSL source is substituted with
             // the Rust constant, so the two can never disagree.
-            source: wgpu::ShaderSource::Wgsl(
-                include_str!("compute.wgsl")
-                    .replace("WORKGROUP_SIZE", &WORKGROUP_SIZE.to_string())
-                    .into(),
-            ),
+            source: wgpu::ShaderSource::Wgsl(compute_shader_source().into()),
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -251,45 +294,65 @@ impl ClothSimulation {
             push_constant_ranges: &[],
         });
 
-        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("Compute Pipeline"),
-            layout: Some(&pipeline_layout),
-            module: &shader,
-            entry_point: "computeMain",
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None,
-        });
+        let compute_pipeline = pipeline(device, &pipeline_layout, &shader, "computeMain");
+        let constraint_pipeline = pipeline(device, &pipeline_layout, &shader, "constraintMain");
 
         Self {
             buffers,
             bind_groups,
-            pipeline,
+            compute_pipeline,
+            constraint_pipeline,
             grid_size,
             particle_count,
             workgroups: particle_count / WORKGROUP_SIZE,
+            constraint_iterations: config.constraint_iterations,
         }
     }
 
     /// Advances the simulation by one fixed time step.
     ///
-    /// Complexity: one dispatch of `particle_count` invocations, each doing a
-    /// constant amount of work (16 neighbours), so O(n) with n particles.
+    /// Two kinds of dispatch, in this order and deliberately not merged:
+    ///
+    /// 1. integration, which turns spring forces, gravity and collisions into a
+    ///    new position and velocity;
+    /// 2. the positional constraint, which pulls back any spring that came out
+    ///    of step 1 stretched past [`MAX_SPRING_STRETCH`].
+    ///
+    /// They cannot share a pass. An invocation may only write its own particle,
+    /// so a merged pass compares a post-integration position against
+    /// pre-integration neighbours and corrects towards a configuration that
+    /// never existed. Splitting them is what makes the cap hold.
+    ///
+    /// Complexity: O(n) per dispatch with n particles, each invocation touching
+    /// a fixed number of neighbours, and 1 + [`CONSTRAINT_ITERATIONS`]
+    /// dispatches per step.
     pub fn step(&mut self, device: &wgpu::Device, queue: &wgpu::Queue) {
+        self.dispatch(device, queue, Pass::Integrate);
+        for _ in 0..self.constraint_iterations {
+            self.dispatch(device, queue, Pass::Constrain);
+        }
+    }
+
+    /// Runs one pass and swaps the ping-pong pair, so what was just written
+    /// becomes what the next pass reads.
+    fn dispatch(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, which: Pass) {
         let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
             label: Some("Compute Encoder"),
         });
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Compute Pass"),
+                label: Some(which.label()),
                 timestamp_writes: None,
             });
-            pass.set_pipeline(&self.pipeline);
+            pass.set_pipeline(match which {
+                Pass::Integrate => &self.compute_pipeline,
+                Pass::Constrain => &self.constraint_pipeline,
+            });
             pass.set_bind_group(0, &self.bind_groups[0], &[]);
             pass.dispatch_workgroups(self.workgroups, 1, 1);
         }
         queue.submit(std::iter::once(encoder.finish()));
 
-        // The buffer just written becomes the next step's input.
         self.buffers.swap(0, 1);
         self.bind_groups.swap(0, 1);
     }
@@ -351,6 +414,49 @@ impl ClothSimulation {
         staging.unmap();
         particles
     }
+}
+
+/// The compute shader source with [`WORKGROUP_SIZE`] substituted in.
+///
+/// The dispatch size and the shader's `@workgroup_size` must agree, and one is
+/// Rust while the other is WGSL, so the number is written once here and injected
+/// rather than repeated. Everything else the two sides share travels as a
+/// uniform in [`PhysicsParams`], which needs no rewriting of the source.
+fn compute_shader_source() -> String {
+    include_str!("compute.wgsl").replace("WORKGROUP_SIZE", &WORKGROUP_SIZE.to_string())
+}
+
+/// Which of the two passes a dispatch runs.
+#[derive(Clone, Copy)]
+enum Pass {
+    Integrate,
+    Constrain,
+}
+
+impl Pass {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Integrate => "Integration Pass",
+            Self::Constrain => "Constraint Pass",
+        }
+    }
+}
+
+/// Builds one compute pipeline over the shared layout and shader module.
+fn pipeline(
+    device: &wgpu::Device,
+    layout: &wgpu::PipelineLayout,
+    shader: &wgpu::ShaderModule,
+    entry_point: &str,
+) -> wgpu::ComputePipeline {
+    device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some(entry_point),
+        layout: Some(layout),
+        module: shader,
+        entry_point,
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
+        cache: None,
+    })
 }
 
 /// A read-write storage buffer binding for the compute stage.
@@ -433,9 +539,9 @@ mod tests {
 
     #[test]
     fn physics_params_layout_matches_the_shader() {
-        // compute.wgsl declares nine consecutive f32 scalars. Field ORDER is
+        // compute.wgsl declares ten consecutive f32 scalars. Field ORDER is
         // load-bearing, so every offset is pinned to catch a reordering.
-        assert_eq!(size_of::<PhysicsParams>(), 36, "9 f32 = 36 bytes");
+        assert_eq!(size_of::<PhysicsParams>(), 40, "10 f32 = 40 bytes");
         assert_eq!(align_of::<PhysicsParams>(), 4);
         assert_eq!(offset_of!(PhysicsParams, structural_k), 0);
         assert_eq!(offset_of!(PhysicsParams, shear_k), 4);
@@ -446,6 +552,7 @@ mod tests {
         assert_eq!(offset_of!(PhysicsParams, dt), 24);
         assert_eq!(offset_of!(PhysicsParams, friction), 28);
         assert_eq!(offset_of!(PhysicsParams, sphere_radius), 32);
+        assert_eq!(offset_of!(PhysicsParams, max_spring_stretch), 36);
     }
 
     #[test]
@@ -477,6 +584,7 @@ mod tests {
                 "dt",
                 "friction",
                 "sphere_radius",
+                "max_spring_stretch",
             ]
         );
     }

@@ -7,7 +7,9 @@
 
 mod harness;
 
-use gpu_cloth_simulation::simulation::{ClothSimulation, WORKGROUP_SIZE};
+use gpu_cloth_simulation::simulation::{
+    ClothConfig, ClothSimulation, CONSTRAINT_ITERATIONS, MAX_SPRING_STRETCH, WORKGROUP_SIZE,
+};
 
 /// The cloth is released from this height, so nothing may ever be above it.
 const RELEASE_HEIGHT: f32 = 0.5;
@@ -196,6 +198,133 @@ fn every_particle_is_stepped() {
         untouched.len(),
         untouched.first()
     );
+}
+
+/// The tightest spacing and the largest grid the UI offers, which together load
+/// the springs hardest and are where every stability problem showed up first.
+fn heaviest_supported_config() -> ClothConfig {
+    ClothConfig {
+        grid_size: 512,
+        spacing: 0.002,
+        ..harness::small_config()
+    }
+}
+
+#[test]
+fn a_settled_sheet_never_reaches_the_stretch_cap() {
+    // The cap is a safety net, not a physics knob. A sheet hanging at rest must
+    // stay under it, or the constraint fires on every step forever: it is then
+    // fighting statics rather than catching a divergence, and the correction it
+    // feeds back into the velocity accumulates until the sheet goes non-finite.
+    // Measured with the constraint disabled, a resting sheet stretches up to
+    // 1.365x over the whole supported range, against a cap of 1.5.
+    let Some(gpu) = harness::gpu_or_skip("a_settled_sheet_never_reaches_the_stretch_cap") else {
+        return;
+    };
+    let config = heaviest_supported_config();
+    let mut simulation = ClothSimulation::new(&gpu.device, &config);
+    let side = simulation.grid_size() as usize;
+    for _ in 0..12_000 {
+        simulation.step(&gpu.device, &gpu.queue);
+    }
+    let settled = simulation.read_particles(&gpu.device, &gpu.queue);
+
+    let worst = harness::worst_stretch(&settled, side, config.spacing);
+    assert!(
+        worst < MAX_SPRING_STRETCH,
+        "a settled sheet stretches {worst}x, at or past the {MAX_SPRING_STRETCH}x cap: \
+         the constraint has nothing left to catch and will fight gravity forever"
+    );
+}
+
+#[test]
+fn the_stretch_cap_clips_the_transient() {
+    // The mechanism tested in the conditions it exists for. As the falling sheet
+    // snaps taut on the sphere it reaches 3.04x its rest length unconstrained,
+    // which is not cloth. The constraint has to bring that down, and this
+    // compares the two runs rather than trusting the cap to be respected.
+    let Some(gpu) = harness::gpu_or_skip("the_stretch_cap_clips_the_transient") else {
+        return;
+    };
+    let config = heaviest_supported_config();
+
+    let peak = |iterations: u32| {
+        let config = ClothConfig {
+            constraint_iterations: iterations,
+            ..config
+        };
+        let mut simulation = ClothSimulation::new(&gpu.device, &config);
+        let side = simulation.grid_size() as usize;
+        let mut peak = 0.0f32;
+        for _ in 0..100 {
+            for _ in 0..50 {
+                simulation.step(&gpu.device, &gpu.queue);
+            }
+            let state = simulation.read_particles(&gpu.device, &gpu.queue);
+            peak = harness::larger(peak, harness::worst_stretch(&state, side, config.spacing));
+        }
+        peak
+    };
+
+    let unconstrained = peak(0);
+    let constrained = peak(CONSTRAINT_ITERATIONS);
+
+    assert!(
+        unconstrained > 2.0,
+        "this configuration is supposed to over-stretch without the constraint, \
+         but it only reached {unconstrained}x: the test no longer exercises the cap"
+    );
+    assert!(
+        constrained < unconstrained * 0.75,
+        "the constraint brought the peak from {unconstrained}x only to {constrained}x: \
+         it is not clipping the transient it exists for"
+    );
+}
+
+/// Downward acceleration in `compute.wgsl`, in scene units per second squared.
+const GRAVITY: f32 = 0.3;
+
+/// The fastest anything in this scene can legitimately travel.
+///
+/// Nothing pushes the cloth: it is released at rest and falls, so a free fall
+/// over the whole drop, from the release height to the ground, is the scale of
+/// every legitimate speed in the scene. Springs snapping taut overshoot it: the
+/// worst measured across the supported range is 2.5x. The factor of ten below
+/// leaves room for that while staying four orders of magnitude under a runaway,
+/// which passed 5e4 within a few steps of starting.
+fn free_fall_speed_limit() -> f32 {
+    10.0 * (2.0 * GRAVITY * (RELEASE_HEIGHT - GROUND)).sqrt()
+}
+
+#[test]
+fn no_particle_outruns_a_free_fall_from_the_release_height() {
+    // repaired: the positional constraint moved a particle back inside the
+    // stretch cap but left its velocity untouched, so the projected position and
+    // the stored velocity disagreed. The spring stayed pinned at the cap, the
+    // same correction was applied again on every step, and the speed grew without
+    // bound until the sheet went non-finite around step 1330. Checking only the
+    // end state hid it: the cap itself still read exactly 1.1000 throughout.
+    let Some(gpu) = harness::gpu_or_skip("no_particle_outruns_a_free_fall_from_the_release_height")
+    else {
+        return;
+    };
+    let config = harness::small_config();
+    let limit = free_fall_speed_limit();
+    let mut simulation = ClothSimulation::new(&gpu.device, &config);
+
+    for block in 1..=28 {
+        for _ in 0..250 {
+            simulation.step(&gpu.device, &gpu.queue);
+        }
+        let particles = simulation.read_particles(&gpu.device, &gpu.queue);
+        let fastest = harness::top_speed(&particles);
+        assert!(
+            fastest <= limit,
+            "after {} steps the fastest particle reached {fastest}, past the {limit} \
+             that ten free falls from the release height allow",
+            block * 250
+        );
+    }
 }
 
 #[test]
