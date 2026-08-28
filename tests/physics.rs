@@ -72,6 +72,68 @@ fn the_cloth_falls() {
 }
 
 #[test]
+fn a_relaxed_sheet_falls_exactly_as_the_equations_say_it_should() {
+    // Every other test here asserts an invariant: bounded, finite, downward. An
+    // invariant catches a sheet that explodes or freezes, not one that falls at
+    // the wrong rate. This is the one comparison against a known answer.
+    //
+    // Before the sheet reaches the sphere it is flat and every particle moves
+    // identically, so no spring is stretched and no spring force exists. What
+    // remains is gravity and the global air drag, integrated by semi-implicit
+    // Euler, which has an exact closed form:
+    //
+    //     v(n+1) = v(n) * (1 - (drag/mass) * dt) - g * dt
+    //     v(n)   = terminal * (1 - decay^n)
+    //     y(n)   = y(0) + dt * sum of v(1..n)
+    //
+    // Agreement pins gravity, the drag coefficient, the mass, the time step and
+    // the integration scheme at once. Any of them changing breaks this.
+    let Some(gpu) =
+        harness::gpu_or_skip("a_relaxed_sheet_falls_exactly_as_the_equations_say_it_should")
+    else {
+        return;
+    };
+    let config = harness::small_config();
+    let physics = config.physics();
+
+    // f64 throughout, so the tolerance measures the simulation rather than the
+    // arithmetic checking it.
+    let step = f64::from(gpu_cloth_simulation::simulation::FIXED_TIME_STEP_SECONDS);
+    let decay = 1.0 - (f64::from(physics.damping) / f64::from(physics.mass)) * step;
+    let terminal = -f64::from(GRAVITY) * step / (1.0 - decay);
+
+    // 500 steps: the sheet is still above the sphere, so nothing has touched.
+    for count in [1u32, 10, 100, 500] {
+        let particles = harness::simulate(&gpu, &config, count);
+        let corner = particles[0];
+
+        let n = f64::from(count);
+        let fallen = decay.powf(n);
+        let speed = terminal * (1.0 - fallen);
+        let height = f64::from(RELEASE_HEIGHT)
+            + step * terminal * (n - decay * (1.0 - fallen) / (1.0 - decay));
+
+        // Three orders of magnitude above the f32 round-off actually observed,
+        // and far below any change of physics.
+        let tolerance = 1e-5;
+        let speed_error = (f64::from(corner.speed[1]) - speed).abs() / speed.abs();
+        let height_error = (f64::from(corner.position[1]) - height).abs() / height.abs();
+        assert!(
+            speed_error < tolerance,
+            "after {count} steps the corner falls at {} where the equations say \
+             {speed}, a relative error of {speed_error}",
+            corner.speed[1]
+        );
+        assert!(
+            height_error < tolerance,
+            "after {count} steps the corner is at {} where the equations say \
+             {height}, a relative error of {height_error}",
+            corner.position[1]
+        );
+    }
+}
+
+#[test]
 fn nothing_falls_through_the_ground() {
     let Some(gpu) = harness::gpu_or_skip("nothing_falls_through_the_ground") else {
         return;

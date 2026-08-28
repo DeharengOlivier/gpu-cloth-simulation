@@ -133,7 +133,17 @@ declarations parsed out of the shader source. They also cover grid resolution,
 particle generation, and the frame clock in `timestep`.
 
 **Physics tests** run the real `compute.wgsl` on a headless device and read the
-particle buffer back. They assert that no particle becomes NaN, that the sheet
+particle buffer back.
+
+One of them is a comparison against a known answer rather than an invariant.
+Before the sheet reaches the sphere it is flat and every particle moves
+identically, so no spring is stretched: what is left is gravity and air drag
+under semi-implicit Euler, which has an exact closed form. The GPU matches it
+to a relative error of 3e-7, which is f32 round-off, and the test holds at 1e-5.
+That single comparison pins gravity, the drag coefficient, the mass, the time
+step and the integration scheme at once.
+
+The rest are invariants. They assert that no particle becomes NaN, that the sheet
 falls, that nothing passes through the ground or ends up inside the sphere, that
 nothing is flung above the release height or outruns ten free falls from it,
 that the sheet stays bounded horizontally, that every particle is stepped
@@ -167,8 +177,12 @@ one.
   of each spring's excess against neighbours that move in the same pass, so a
   fixed iteration count leaves a residue: 1.59x against a 1.5x cap at the
   heaviest supported setting.
-- **The physics has no reference solution.** The tests assert invariants, which
-  catches an exploding or frozen sheet, not a subtly wrong drape.
+- **Only the free-fall phase has a reference solution.** Once the sheet is in
+  contact and the springs are loaded there is no closed form to check against,
+  so from that point on the tests assert invariants, which catch an exploding
+  or frozen sheet rather than a subtly wrong drape.
+- **One coefficient plays two roles.** `damping` is both the spring damping and
+  the global air drag, so tuning it moves two independent things at once.
 
 ## License
 
