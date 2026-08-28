@@ -55,6 +55,9 @@ pub const MAX_SPRING_STRETCH: f32 = 1.5;
 /// harness at the tightest spacing the UI offers; see `tests/physics.rs`.
 pub const CONSTRAINT_ITERATIONS: u32 = 2;
 
+/// Coulomb friction coefficient between the cloth and the obstacle sphere.
+pub const DEFAULT_FRICTION: f32 = 0.8;
+
 /// One cloth particle, as both the CPU and the GPU see it.
 ///
 /// `#[repr(C)]` gives a stable layout so the two agree on field placement, and
@@ -125,9 +128,14 @@ pub struct ClothConfig {
     /// How far a spring may stretch before the constraint pulls it back.
     ///
     /// Defaults to [`MAX_SPRING_STRETCH`]. It reaches the shader as a uniform
-    /// rather than a substituted literal, so a test can pick a cap the sheet
-    /// cannot satisfy and check the constraint stays bounded anyway.
+    /// rather than a substituted literal, so a test can turn the constraint off
+    /// and compare against a run with it on.
     pub max_spring_stretch: f32,
+    /// Coulomb friction coefficient between the cloth and the obstacle sphere.
+    ///
+    /// 0 is frictionless, 1 lets friction cancel a tangential force as large as
+    /// the normal one.
+    pub friction: f32,
 }
 
 impl Default for ClothConfig {
@@ -139,6 +147,7 @@ impl Default for ClothConfig {
             sphere_radius: 0.4,
             constraint_iterations: CONSTRAINT_ITERATIONS,
             max_spring_stretch: MAX_SPRING_STRETCH,
+            friction: DEFAULT_FRICTION,
         }
     }
 }
@@ -157,7 +166,7 @@ impl ClothConfig {
             mass: 0.1,
             rest_length: self.spacing,
             dt: FIXED_TIME_STEP_SECONDS,
-            friction: 0.8,
+            friction: self.friction,
             sphere_radius: self.sphere_radius,
             max_spring_stretch: self.max_spring_stretch,
             grid_size: resolve_grid_size(self.grid_size),

@@ -34,12 +34,21 @@ struct PhysicsParams {
 
 
 
-// Downward gravity acceleration and the y-coordinate of the ground plane.
-const GRAVITY: f32 = -0.3;      // -0.5 also works; lower magnitude = slower fall
+// Downward gravity, in scene units per second squared. This is a scene
+// constant, not the Earth's 9.81: the cloth is a fraction of a unit across, and
+// a fall that reads as natural at that scale is a slow one.
+const GRAVITY: f32 = -0.3;
+// The y-coordinate of the ground plane the sheet is clamped to.
 const GROUND: f32 = -1.0;
-// Precomputed sqrt(2): diagonal (shear) springs have a rest length of
-// rest_length * sqrt(2) because the diagonal of a unit grid cell is sqrt(2).
-const sqrt_of_two: f32 = 1.41421356237309504880168872420969807856967187537694807317667973799073247846210703885038753432764157273501384623;
+
+// Fraction of the velocity a particle keeps when it bounces. Both are inelastic:
+// the sheet is meant to land and stay, not bounce.
+const SPHERE_RESTITUTION: f32 = 0.5;
+const GROUND_RESTITUTION: f32 = 0.2;
+
+// The diagonal of a square cell, which is the rest length of a shear spring.
+// f32 carries about seven significant digits, so these are all of them.
+const SQRT_2: f32 = 1.4142135;
 
 // Hooke's law spring with velocity damping: F = -k * (length - rest_length) along
 // the spring axis, plus a damping term proportional to the relative velocity along
@@ -154,7 +163,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let diag_index = index - grid_size - 1;
         let diag_pos = instances_ping[diag_index].position.xyz;
         let diag_speed = instances_ping[diag_index].speed.xyz;
-        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
+        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * SQRT_2, physics.shear_k, physics.damping);
     }
 
     // Top-right diagonal
@@ -162,7 +171,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let diag_index = index - grid_size + 1;
         let diag_pos = instances_ping[diag_index].position.xyz;
         let diag_speed = instances_ping[diag_index].speed.xyz;
-        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
+        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * SQRT_2, physics.shear_k, physics.damping);
     }
 
     // Bottom-left diagonal
@@ -170,7 +179,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let diag_index = index + grid_size - 1;
         let diag_pos = instances_ping[diag_index].position.xyz;
         let diag_speed = instances_ping[diag_index].speed.xyz;
-        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
+        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * SQRT_2, physics.shear_k, physics.damping);
     }
 
     // Bottom-right diagonal
@@ -178,7 +187,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let diag_index = index + grid_size + 1;
         let diag_pos = instances_ping[diag_index].position.xyz;
         let diag_speed = instances_ping[diag_index].speed.xyz;
-        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * sqrt_of_two, physics.shear_k, physics.damping);
+        total_force += calculate_spring_force(pos, diag_pos, speed, diag_speed, physics.rest_length * SQRT_2, physics.shear_k, physics.damping);
     }
 
     // Bend springs connect each particle to the neighbour two cells away
@@ -259,22 +268,19 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         if (Ro_t_magnitude > 0.0001) {
             let It = Ro_t / Ro_t_magnitude;
 
-            // Friction coefficient (kept local; not driven by PhysicsParams.friction yet).
-            let cf = 0.9;
-
-            // Friction force opposes the tangential motion, capped by cf * |F_n|.
-            let friction_magnitude = min(Ro_t_magnitude, cf * abs(Ro_n_magnitude));
+            // Friction force opposes the tangential motion, capped by
+            // friction * |F_n|.
+            let friction_magnitude = min(Ro_t_magnitude, physics.friction * abs(Ro_n_magnitude));
             let friction_force = -friction_magnitude * It;
 
             total_force += friction_force;
         }
 
         // Reflect the velocity about the surface normal and damp it (inelastic bounce).
-        let damping = 0.5;
         let dot_product = dot(instance.speed.xyz, normal);
-        instance.speed.x = (instance.speed.x - 2.0 * dot_product * normal.x) * damping;
-        instance.speed.y = (instance.speed.y - 2.0 * dot_product * normal.y) * damping;
-        instance.speed.z = (instance.speed.z - 2.0 * dot_product * normal.z) * damping;
+        instance.speed.x = (instance.speed.x - 2.0 * dot_product * normal.x) * SPHERE_RESTITUTION;
+        instance.speed.y = (instance.speed.y - 2.0 * dot_product * normal.y) * SPHERE_RESTITUTION;
+        instance.speed.z = (instance.speed.z - 2.0 * dot_product * normal.z) * SPHERE_RESTITUTION;
     }
 
 
@@ -284,8 +290,7 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Clamp the particle to the ground plane and damp its downward velocity.
     if (instance.position.y < GROUND) {
         instance.position.y = GROUND;
-        let ground_damping = 0.2;
-        instance.speed.y = -instance.speed.y * ground_damping;
+        instance.speed.y = -instance.speed.y * GROUND_RESTITUTION;
     }
 
     // Semi-implicit (symplectic) Euler integration: update velocity from the net
@@ -326,7 +331,7 @@ fn constraintMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let col = index % grid_size;
 
     let structural = physics.rest_length;
-    let shear = physics.rest_length * sqrt_of_two;
+    let shear = physics.rest_length * SQRT_2;
     var correction = vec3<f32>(0.0);
     let pos = instance.position.xyz;
 

@@ -264,6 +264,39 @@ fn a_grid_that_does_not_fill_its_workgroups_still_simulates() {
     );
 }
 
+#[test]
+fn the_friction_coefficient_reaches_the_shader() {
+    // repaired: PhysicsParams carried a `friction` field, uploaded on every
+    // build, that the shader never read. The collision code used a local
+    // `let cf = 0.9` instead, under a comment saying so. The parameter was
+    // therefore inert, and nothing would have noticed if it had been removed.
+    let Some(gpu) = harness::gpu_or_skip("the_friction_coefficient_reaches_the_shader") else {
+        return;
+    };
+    let slippery = ClothConfig {
+        friction: 0.0,
+        ..harness::small_config()
+    };
+    let grippy = ClothConfig {
+        friction: 1.0,
+        ..harness::small_config()
+    };
+
+    // Long enough for the sheet to reach the sphere, which is the only place
+    // friction is applied.
+    let with_none = harness::simulate(&gpu, &slippery, 2_000);
+    let with_lots = harness::simulate(&gpu, &grippy, 2_000);
+
+    assert!(
+        with_none
+            .iter()
+            .zip(&with_lots)
+            .any(|(a, b)| a.position != b.position),
+        "the sheet settles identically with no friction and with full friction: \
+         the coefficient is not reaching the shader"
+    );
+}
+
 /// The tightest spacing and the largest grid the UI offers, which together load
 /// the springs hardest and are where every stability problem showed up first.
 fn heaviest_supported_config() -> ClothConfig {
