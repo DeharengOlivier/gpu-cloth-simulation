@@ -20,6 +20,7 @@ struct PhysicsParams {
     friction: f32,
     sphere_radius: f32,
     max_spring_stretch: f32,
+    grid_size: u32,
 };
 
 // Bind group 0 for the compute pass. instances_ping is read, instances_pong is
@@ -90,11 +91,17 @@ fn distance_correction(pos1: vec3<f32>, pos2: vec3<f32>, rest_length: f32, max_s
 @compute @workgroup_size(WORKGROUP_SIZE)
 fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let index = global_id.x;
+    // The dispatch rounds the workgroup count up, so the last workgroup runs
+    // invocations with no particle behind them. They must leave immediately.
+    if (index >= arrayLength(&instances_ping)) {
+        return;
+    }
     var instance = instances_ping[index];
 
-    // Recover the particle's (row, col) in the NxN grid. The grid is square, so
-    // its side length is sqrt(total particle count).
-    let grid_size = u32(sqrt(f32(arrayLength(&instances_ping))));
+    // Recover the particle's (row, col) in the grid. The side comes from the
+    // uniform: deriving it from the buffer length only worked while the length
+    // was guaranteed to be a perfect square.
+    let grid_size = physics.grid_size;
     let row = index / grid_size;
     let col = index % grid_size;
 
@@ -309,9 +316,12 @@ fn computeMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
 @compute @workgroup_size(WORKGROUP_SIZE)
 fn constraintMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let index = global_id.x;
+    if (index >= arrayLength(&instances_ping)) {
+        return;
+    }
     var instance = instances_ping[index];
 
-    let grid_size = u32(sqrt(f32(arrayLength(&instances_ping))));
+    let grid_size = physics.grid_size;
     let row = index / grid_size;
     let col = index % grid_size;
 
@@ -348,6 +358,11 @@ fn constraintMain(@builtin(global_invocation_id) global_id: vec3<u32>) {
         correction += distance_correction(pos, instances_ping[index + grid_size + 1u].position.xyz, shear, physics.max_spring_stretch);
     }
 
+    // The projected position must be paid for in velocity too. Moving a particle
+    // without telling it how it moved leaves the spring pinned at the cap: the
+    // integrator re-applies the same outward velocity every step, the constraint
+    // clamps the position back, and the velocity grows without bound. Feeding the
+    // displacement back as correction / dt is what makes the two agree.
     instance.position.x += correction.x;
     instance.position.y += correction.y;
     instance.position.z += correction.z;

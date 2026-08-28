@@ -166,18 +166,18 @@ fn the_simulation_is_deterministic() {
 
 #[test]
 fn every_particle_is_stepped() {
-    // The dispatch covers particle_count / WORKGROUP_SIZE workgroups. If the
-    // arithmetic were ever wrong, the tail of the buffer would simply never
-    // move, which no visual check would catch on a 65,536-particle sheet.
+    // The dispatch rounds the workgroup count up and the shader discards the
+    // surplus invocations. If either half of that were wrong, the tail of the
+    // buffer would simply never move, which no visual check would catch on a
+    // sheet of thousands of particles.
     let Some(gpu) = harness::gpu_or_skip("every_particle_is_stepped") else {
         return;
     };
     let config = harness::small_config();
     let mut simulation = ClothSimulation::new(&gpu.device, &config);
-    assert_eq!(
-        simulation.particle_count() % WORKGROUP_SIZE,
-        0,
-        "a partial workgroup would leave particles unstepped"
+    assert!(
+        simulation.particle_count() % WORKGROUP_SIZE != 0,
+        "this test is only worth running on a grid with a partial workgroup"
     );
     let before = simulation.read_particles(&gpu.device, &gpu.queue);
     for _ in 0..200 {
@@ -197,6 +197,70 @@ fn every_particle_is_stepped() {
         "{} particles never moved, first at index {:?}",
         untouched.len(),
         untouched.first()
+    );
+}
+
+#[test]
+fn the_grid_size_asked_for_is_the_grid_size_simulated() {
+    // The slider offers 64 to 512 in steps of 64, and the grid side was rounded
+    // down to a multiple of the workgroup size so the dispatch divided evenly.
+    // Every request below 256 therefore became 256: asking for a 64 x 64 sheet
+    // built a 256 x 256 one, sixteen times the particles, and the number on the
+    // slider was not the number being simulated.
+    let Some(gpu) = harness::gpu_or_skip("the_grid_size_asked_for_is_the_grid_size_simulated")
+    else {
+        return;
+    };
+    for requested in [64u32, 128, 192, 256, 320, 512] {
+        let config = ClothConfig {
+            grid_size: requested,
+            ..harness::small_config()
+        };
+        let simulation = ClothSimulation::new(&gpu.device, &config);
+        assert_eq!(
+            simulation.grid_size(),
+            requested,
+            "asked for a {requested} x {requested} sheet"
+        );
+        assert_eq!(
+            simulation.read_particles(&gpu.device, &gpu.queue).len(),
+            (requested * requested) as usize,
+            "particle count for a {requested} x {requested} sheet"
+        );
+    }
+}
+
+#[test]
+fn a_grid_that_does_not_fill_its_workgroups_still_simulates() {
+    // 100 x 100 is 10 000 particles, which is 39.06 workgroups. The dispatch
+    // rounds up, so the last workgroup runs invocations with no particle behind
+    // them and the shader has to discard them rather than read past the buffer.
+    let Some(gpu) =
+        harness::gpu_or_skip("a_grid_that_does_not_fill_its_workgroups_still_simulates")
+    else {
+        return;
+    };
+    let config = ClothConfig {
+        grid_size: 100,
+        ..harness::small_config()
+    };
+    let before = ClothSimulation::new(&gpu.device, &config).read_particles(&gpu.device, &gpu.queue);
+    let after = harness::simulate(&gpu, &config, 500);
+
+    assert_eq!(after.len(), 10_000);
+    for (index, particle) in after.iter().enumerate() {
+        assert!(
+            particle
+                .position
+                .iter()
+                .chain(particle.speed.iter())
+                .all(|v| v.is_finite()),
+            "particle {index} is not finite: {particle:?}"
+        );
+    }
+    assert!(
+        harness::mean_height(&after) < harness::mean_height(&before),
+        "the sheet did not fall, so the surplus invocations may have eaten the real ones"
     );
 }
 

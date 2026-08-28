@@ -100,6 +100,9 @@ pub struct PhysicsParams {
     /// How far a spring may stretch past its rest length; see
     /// [`MAX_SPRING_STRETCH`].
     pub max_spring_stretch: f32,
+    /// Particles per side of the square grid, which the shader needs to turn a
+    /// flat index into a (row, column).
+    pub grid_size: u32,
 }
 
 /// Everything needed to build a simulation.
@@ -157,17 +160,26 @@ impl ClothConfig {
             friction: 0.8,
             sphere_radius: self.sphere_radius,
             max_spring_stretch: self.max_spring_stretch,
+            grid_size: resolve_grid_size(self.grid_size),
         }
     }
 }
 
-/// Rounds a requested grid side length down to a multiple of [`WORKGROUP_SIZE`]
-/// and clamps it to at least one full workgroup.
+/// The smallest grid that has a spring in it at all.
+pub const MIN_GRID_SIZE: u32 = 2;
+
+/// The grid side actually built for a requested one.
+///
+/// It used to round down to a multiple of [`WORKGROUP_SIZE`] so the dispatch
+/// divided evenly, which turned every request under 256 into 256: the slider
+/// offered a 64 x 64 sheet and ran a 256 x 256 one. The dispatch now rounds the
+/// *workgroup count* up instead and the shader discards the surplus invocations,
+/// so any side works and the only adjustment left is the floor below which there
+/// are no springs to simulate.
 ///
 /// Complexity: O(1).
-pub fn round_grid_size(grid_size: u32) -> u32 {
-    let rounded = (grid_size / WORKGROUP_SIZE) * WORKGROUP_SIZE;
-    rounded.max(WORKGROUP_SIZE) // Minimum one workgroup
+pub fn resolve_grid_size(grid_size: u32) -> u32 {
+    grid_size.max(MIN_GRID_SIZE)
 }
 
 /// Builds the particles of a `rows` x `cols` grid centred on the origin, flat at
@@ -211,10 +223,10 @@ pub struct ClothSimulation {
 impl ClothSimulation {
     /// Builds every GPU resource the physics step needs.
     ///
-    /// The grid side is rounded by [`round_grid_size`]; [`Self::grid_size`]
-    /// reports what was actually built, which may differ from what was asked.
+    /// The grid side passes through [`resolve_grid_size`]; [`Self::grid_size`]
+    /// reports what was actually built.
     pub fn new(device: &wgpu::Device, config: &ClothConfig) -> Self {
-        let grid_size = round_grid_size(config.grid_size);
+        let grid_size = resolve_grid_size(config.grid_size);
         let instances =
             generate_instances(grid_size, grid_size, config.spacing, config.initial_height);
         let particle_count = instances.len() as u32;
@@ -304,7 +316,7 @@ impl ClothSimulation {
             constraint_pipeline,
             grid_size,
             particle_count,
-            workgroups: particle_count / WORKGROUP_SIZE,
+            workgroups: particle_count.div_ceil(WORKGROUP_SIZE),
             constraint_iterations: config.constraint_iterations,
         }
     }
@@ -539,9 +551,10 @@ mod tests {
 
     #[test]
     fn physics_params_layout_matches_the_shader() {
-        // compute.wgsl declares ten consecutive f32 scalars. Field ORDER is
-        // load-bearing, so every offset is pinned to catch a reordering.
-        assert_eq!(size_of::<PhysicsParams>(), 40, "10 f32 = 40 bytes");
+        // compute.wgsl declares ten f32 scalars and one u32, all 4 bytes and
+        // all consecutive. Field ORDER is load-bearing, so every offset is
+        // pinned to catch a reordering.
+        assert_eq!(size_of::<PhysicsParams>(), 44, "10 f32 + 1 u32 = 44 bytes");
         assert_eq!(align_of::<PhysicsParams>(), 4);
         assert_eq!(offset_of!(PhysicsParams, structural_k), 0);
         assert_eq!(offset_of!(PhysicsParams, shear_k), 4);
@@ -553,6 +566,7 @@ mod tests {
         assert_eq!(offset_of!(PhysicsParams, friction), 28);
         assert_eq!(offset_of!(PhysicsParams, sphere_radius), 32);
         assert_eq!(offset_of!(PhysicsParams, max_spring_stretch), 36);
+        assert_eq!(offset_of!(PhysicsParams, grid_size), 40);
     }
 
     #[test]
@@ -585,6 +599,7 @@ mod tests {
                 "friction",
                 "sphere_radius",
                 "max_spring_stretch",
+                "grid_size",
             ]
         );
     }
@@ -604,34 +619,40 @@ mod tests {
         );
     }
 
-    // ---- WORKGROUP_SIZE rounding of the grid side ----
+    // ---- the grid side the caller asks for ----
 
     #[test]
-    fn round_grid_size_rounds_down_to_a_multiple() {
-        assert_eq!(round_grid_size(256), 256);
-        assert_eq!(round_grid_size(512), 512);
-        assert_eq!(round_grid_size(300), 256);
-        assert_eq!(round_grid_size(511), 256);
-        assert_eq!(round_grid_size(513), 512);
-    }
-
-    #[test]
-    fn round_grid_size_clamps_to_one_workgroup() {
-        for requested in [0, 1, 64, 255] {
-            assert_eq!(round_grid_size(requested), WORKGROUP_SIZE);
+    fn the_requested_grid_side_is_the_one_used() {
+        // It used to round down to a multiple of WORKGROUP_SIZE, so every side
+        // under 256 silently became 256.
+        for requested in [2u32, 3, 63, 64, 100, 255, 256, 300, 512, 1000] {
+            assert_eq!(resolve_grid_size(requested), requested);
         }
     }
 
     #[test]
-    fn a_rounded_grid_dispatches_a_whole_number_of_workgroups() {
-        // The dispatch is particle_count / WORKGROUP_SIZE, so the count must
-        // divide exactly or the last particles are never stepped.
-        for requested in [0u32, 1, 63, 64, 255, 256, 300, 512, 1000] {
-            let side = round_grid_size(requested);
-            assert_eq!(
-                (side * side) % WORKGROUP_SIZE,
-                0,
-                "requested={requested} leaves a partial workgroup"
+    fn a_grid_too_small_to_hold_a_spring_is_raised_to_one_that_can() {
+        for requested in [0, 1] {
+            assert_eq!(resolve_grid_size(requested), MIN_GRID_SIZE);
+        }
+    }
+
+    #[test]
+    fn the_dispatch_covers_every_particle_and_wastes_at_most_one_workgroup() {
+        // Rounding up is what lets any grid side run, and the shader discards
+        // the surplus invocations. Rounding down would leave the last particles
+        // unstepped, which is the failure this pins.
+        for side in [2u32, 3, 63, 64, 100, 255, 256, 300, 512] {
+            let particles = side * side;
+            let workgroups = particles.div_ceil(WORKGROUP_SIZE);
+            assert!(
+                workgroups * WORKGROUP_SIZE >= particles,
+                "side={side} leaves {} particles unstepped",
+                particles - workgroups * WORKGROUP_SIZE
+            );
+            assert!(
+                (workgroups - 1) * WORKGROUP_SIZE < particles,
+                "side={side} dispatches a workgroup with nothing in it"
             );
         }
     }
@@ -685,9 +706,9 @@ mod tests {
     #[test]
     fn the_default_configuration_is_dispatch_safe() {
         let config = ClothConfig::default();
-        let side = round_grid_size(config.grid_size);
+        let side = resolve_grid_size(config.grid_size);
         assert_eq!(side, 256);
-        assert_eq!((side * side) % WORKGROUP_SIZE, 0);
+        assert!(side * side >= WORKGROUP_SIZE);
     }
 
     #[test]

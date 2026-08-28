@@ -62,11 +62,15 @@ pub fn simulate(gpu: &Gpu, config: &ClothConfig, steps: u32) -> Vec<Instance> {
     simulation.read_particles(&gpu.device, &gpu.queue)
 }
 
-/// The smallest cloth the simulation can build, so a test can step it thousands
-/// of times in a second.
+/// A cloth small enough to step thousands of times per second, and still large
+/// enough to drape: at this spacing the sheet is 0.38 across against an obstacle
+/// sphere of radius 0.4, so it lands on the sphere rather than missing it.
+///
+/// The side is deliberately not a multiple of the workgroup size, so the whole
+/// suite runs against a dispatch with a partial workgroup in it.
 pub fn small_config() -> ClothConfig {
     ClothConfig {
-        grid_size: 1, // Raised to the one-workgroup minimum.
+        grid_size: 100,
         spacing: 0.006,
         initial_height: 0.5,
         ..ClothConfig::default()
