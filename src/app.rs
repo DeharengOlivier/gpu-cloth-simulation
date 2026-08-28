@@ -594,6 +594,29 @@ mod tests {
     }
 
     #[test]
+    fn the_render_shader_binds_nothing_the_pipeline_layout_does_not_provide() {
+        // repaired: shader.wgsl declared `@group(1) @binding(1) instances`, an
+        // array of a two-vec3 Instance struct that did not match the vec4 layout
+        // the compute shader writes. The render pipeline layout lists one bind
+        // group, the camera, so nothing could ever have been bound to group 1.
+        // It survived because the binding was unused and got pruned.
+        let shader = include_str!("shader.wgsl");
+        let groups: Vec<&str> = shader
+            .match_indices("@group(")
+            .map(|(at, _)| {
+                let rest = &shader[at + "@group(".len()..];
+                &rest[..rest.find(')').expect("unterminated @group")]
+            })
+            .collect();
+        assert!(!groups.is_empty(), "shader.wgsl must bind the camera");
+        assert!(
+            groups.iter().all(|group| *group == "0"),
+            "the render pipeline layout provides one bind group, but the shader \
+             declares groups {groups:?}"
+        );
+    }
+
+    #[test]
     fn the_default_settings_describe_the_default_simulation() {
         let settings = ClothSettings::default();
         let config = settings.to_config();
