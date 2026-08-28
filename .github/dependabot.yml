@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # The workflows pin actions by major tag, which still moves. This keeps the
+  # pins current rather than trusting a tag not to change under the build.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
