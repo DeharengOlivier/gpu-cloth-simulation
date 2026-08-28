@@ -4,111 +4,169 @@
   <img src="assets/cloth.svg" alt="GPU cloth draping over a sphere" width="520">
 </p>
 
-
-A real-time cloth simulation that runs its physics entirely on the GPU, written in Rust with [wgpu](https://wgpu.rs/) (WebGPU) and WGSL compute shaders. A square piece of cloth falls under gravity, collides with a sphere and the ground, and settles, with every spring force computed in parallel on the GPU.
+A real-time cloth simulation whose physics runs entirely on the GPU, written in
+Rust with [wgpu](https://wgpu.rs/) (WebGPU) and WGSL compute shaders. A square
+sheet falls under gravity, collides with a sphere and the ground, and settles.
+Every spring force is computed in parallel on the GPU.
 
 Built for the parallel-programming course at ECAM (Brussels).
 
-This is a **learning project**. I built it to get hands-on with two things at once: **parallel programming** (moving a physics solver onto thousands of GPU threads that all run at the same time, which forces you to design around data races, double-buffering and workgroups) and the **Rust** language (ownership, traits and zero-cost abstractions, plus the `wgpu`/WGSL ecosystem for talking to the GPU). The cloth is the excuse; the real goal was the GPU compute model and learning Rust.
+This is a **learning project**, built to get hands-on with two things at once:
+**parallel programming**, moving a physics solver onto thousands of GPU threads
+that all run at the same time, which forces the design around data races,
+double-buffering and workgroups; and **Rust**, along with the `wgpu`/WGSL
+ecosystem for talking to the GPU. The cloth is the excuse.
 
 ## What it demonstrates
 
-- A **mass-spring physical model** solved on the GPU rather than the CPU, so thousands of particles are integrated in parallel every frame.
-- A real **GPU compute pipeline** (WGSL compute shader) feeding a separate **render pipeline**, the two communicating through GPU storage buffers.
-- A **ping-pong buffer** scheme (read from `ping`, write to `pong`, then swap) to update particle state without read/write conflicts across parallel invocations.
-- Interactive tuning of the physics in real time through an [egui](https://github.com/emilk/egui) panel.
+- A **mass-spring model** solved on the GPU rather than the CPU, so hundreds of
+  thousands of particles are integrated in parallel every frame.
+- A **compute pipeline** (WGSL) feeding a separate **render pipeline**, the two
+  sharing GPU storage buffers with no round trip through the CPU.
+- A **ping-pong buffer** scheme (read `ping`, write `pong`, swap) that updates
+  particle state without read/write conflicts across parallel invocations.
+- The physics **asserted rather than watched**: the compute shader runs on a
+  headless device inside `cargo test`, and the particle buffer is read back and
+  checked against the invariants the simulation claims.
 
 ## The physics model
 
-Each cloth particle is a point mass linked to its neighbours by three families of springs (Hooke's law, with velocity damping to keep the system stable):
+Each particle is a point mass linked to its neighbours by three families of
+springs (Hooke's law, with velocity damping):
 
-- **Structural** springs (horizontal and vertical neighbours) hold the grid together.
-- **Shear** springs (diagonal neighbours) resist in-plane shearing.
-- **Bend** springs (two cells apart) resist folding.
+- **Structural** springs, to the four direct neighbours, hold the grid together.
+- **Shear** springs, to the four diagonal neighbours, resist in-plane shearing.
+- **Bend** springs, two cells apart, resist folding.
 
-On top of the spring forces, the compute shader applies gravity, ground collision, collision against a sphere of configurable radius, friction, and a distance constraint that caps how far a spring can stretch (to avoid the cloth exploding at large time steps).
+On top of the spring forces the shader applies gravity, collision with the
+ground plane and with a sphere, and Coulomb friction against that sphere.
+
+Each step is then followed by a **positional constraint pass** that pulls back
+any spring stretched past `MAX_SPRING_STRETCH` (1.5x its rest length). It is a
+safeguard, not a shaping tool, and the value is bracketed by two measurements
+taken with the constraint disabled across the whole range the interface offers:
+
+- a sheet **at rest** stretches up to 1.365x under its own weight, so a cap
+  below that would be unsatisfiable, firing on every step forever and fighting
+  gravity instead of catching a divergence;
+- the **transient**, as the falling sheet snaps taut on the sphere, reaches
+  3.04x, which is not cloth, so there is real work for the cap to do.
+
+Two relaxation passes run per step: the transient peak lands at 1.59x with two
+and 1.81x with one.
 
 ## Architecture
 
+The dependency arrow points inward. `simulation` needs a `wgpu::Device` and
+nothing else, which is what makes it testable without a window.
+
 ```
-main.rs
-  └── sets up the wgpu-bootstrap Runner (window, device/queue, egui, frame loop)
-        └── InstanceApp (instances_app.rs)   the whole application
-              ├── Compute pipeline  ── compute.wgsl   physics step (spring forces + integration)
-              │     ├── instances_ping / instances_pong   particle state (position + velocity)
-              │     ├── TimeUniform        time step / duration
-              │     └── PhysicsParams      stiffness, damping, mass, rest length, sphere radius...
-              │
-              └── Render pipeline   ── shader.wgsl
-                    ├── draws the cloth grid (instanced from the simulated positions)
-                    ├── draws the colliding sphere (icosphere)
-                    └── OrbitCamera (view + projection)
+main.rs               configures and launches the wgpu-bootstrap runner
+  └── app.rs          the interactive program: window, camera, egui, rendering
+        ├── timestep.rs    elapsed frame time -> whole physics steps (no GPU)
+        └── simulation.rs  the cloth itself
+              ├── compute.wgsl   integration pass, then the constraint pass
+              ├── instances_ping / instances_pong   particle state, ping-ponged
+              └── PhysicsParams  stiffness, damping, mass, rest length, friction,
+                                 sphere radius, stretch cap, grid side
+headless.rs           a device with no window, for tests and benchmarks
+shader.wgsl           rendering: the cloth grid, instanced, and the sphere
 ```
 
-Each frame: the compute shader integrates one physics step into the `pong` buffer, the buffers are swapped, then the render pipeline draws the cloth and the sphere from the updated positions.
-
-## Tech stack
-
-- **Rust** (edition 2021)
-- **wgpu** / **WebGPU** with **WGSL** shaders (one compute shader, one render shader)
-- [**wgpu-bootstrap**](https://github.com/qlurkin/wgpu-bootstrap) for window, device and frame-loop boilerplate
-- **egui** (real-time parameter UI), **cgmath** (3D math), **bytemuck** (CPU/GPU data layout)
+Per frame: `timestep` says how many fixed steps the elapsed time paid for, each
+step dispatches the integration pass and then the constraint passes, and the
+render pipeline draws straight from the buffer the physics just wrote.
 
 ## Getting started
 
-You need a recent [Rust toolchain](https://www.rust-lang.org/tools/install) and a machine with a GPU that supports WebGPU (Vulkan, Metal or DX12).
+You need a recent [Rust toolchain](https://www.rust-lang.org/tools/install) and
+a GPU that supports WebGPU (Vulkan, Metal or DX12).
 
 ```bash
-git clone https://github.com/DeharengOlivier/<repo>.git
-cd <repo>
+git clone https://github.com/DeharengOlivier/gpu-cloth-simulation.git
+cd gpu-cloth-simulation
 cargo run --release
 ```
 
-Use `--release`: the simulation is much smoother with optimizations on.
+Use `--release`. A debug build runs the simulation far below real time.
 
 ## Controls
 
-- **Orbit camera**: drag with the mouse to rotate, scroll to zoom.
-- **egui panel**: tune the physics live (spring stiffness for structural / shear / bend, damping, mass, rest length, time step, friction, sphere radius) and watch the cloth react.
+- **Camera**: drag to orbit, scroll to zoom.
+- **Panel**: pause and resume, pick the cloth and sphere colours, and set the
+  grid side (64 to 512), the spacing between particles and the drawn point size.
+  Those three need a restart, which the panel offers once something has changed.
 
-## Project structure
+The stiffness, damping, mass, friction and sphere radius are part of
+`ClothConfig` and reach the shader as uniforms, but the panel does not expose
+them yet.
 
-```
-src/
-├── main.rs            entry point, configures and launches the Runner
-├── instances_app.rs   application: buffers, pipelines, camera, egui, frame update
-├── compute.wgsl       GPU physics step (spring forces, integration, collisions)
-└── shader.wgsl        GPU rendering (cloth grid + sphere)
-```
+## Performance
+
+`cargo run --release --example throughput` measures it. Simulated time keeps up
+with real time at 625 steps per second, and one 60 fps frame needs 10.4 steps.
+On an Apple M5 Pro:
+
+| grid | particles | steps/s | share of a 60 fps frame |
+| ---: | --------: | ------: | ----------------------: |
+|   64 |     4 096 |   6 809 |                    9.2% |
+|  128 |    16 384 |   5 894 |                   10.6% |
+|  256 |    65 536 |   3 470 |                   18.0% |
+|  512 |   262 144 |   1 875 |                   33.3% |
+
+Regenerate rather than edit these, and say which machine they came from.
 
 ## Testing
 
 ```bash
-cargo test
+cargo test                              # everything except the two heavy tests
+cargo test --test physics -- --ignored  # the two, on the largest supported grid
 ```
 
-`cargo test` runs a small suite of **CPU-only** unit tests (in `src/instances_app.rs`). They need no GPU, window, or surface, so they run anywhere the project compiles, including CI. They cover:
+**CPU tests**, needing no device, cover the layout the CPU and the GPU have to
+agree on, byte for byte, since `bytemuck` uploads these structs as raw bytes and
+the WGSL reads them back by offset rather than by name: the size and every field
+offset of `Vertex`, `Instance` and `PhysicsParams`, checked against the WGSL
+declarations parsed out of the shader source. They also cover grid resolution,
+particle generation, and the frame clock in `timestep`.
 
-- **CPU/GPU struct-layout invariants.** Using `std::mem::size_of` / `align_of` / `offset_of!`, the tests pin the size and field offsets of `Vertex`, `Instance`, `TimeUniform`, and `PhysicsParams`, and check that the byte offsets declared in `Vertex::desc()` / `Instance::desc()` match the actual struct layout. These structs are uploaded to the GPU as raw bytes (`bytemuck`) and read back by the WGSL shaders **by byte offset, not by field name**, so a size or field-order mismatch is a real, silent bug class. The tests encode the layout the WGSL declarations rely on (for example `Instance` = two `vec4<f32>` = 32 bytes with `speed` at offset 16, and the nine `f32` fields of `PhysicsParams` in their exact order).
-- **`WORKGROUP_SIZE` rounding of `grid_size`.** `round_grid_size` rounds a requested side length down to a multiple of `WORKGROUP_SIZE` and clamps it to at least one full workgroup; the tests check the rounding, the clamp (including 0), and that the resulting particle count (`side * side`) is always a whole multiple of `WORKGROUP_SIZE` so the compute dispatch leaves no particle unprocessed.
-- **Cloth grid generation.** `generate_instances` (the pure-CPU part of `generate_grid`) is tested for particle count, row-major ordering (`index = row * cols + col`), the documented centering offset, the padding component being zero, and every particle starting at rest.
+**Physics tests** run the real `compute.wgsl` on a headless device and read the
+particle buffer back. They assert that no particle becomes NaN, that the sheet
+falls, that nothing passes through the ground or ends up inside the sphere, that
+nothing is flung above the release height or outruns ten free falls from it,
+that the sheet stays bounded horizontally, that every particle is stepped
+including in a partial workgroup, that two identical runs agree, that the grid
+side asked for is the one simulated, that the friction coefficient reaches the
+shader, that the cloth settles, that a settled sheet stays under the stretch
+cap, and that the cap measurably clips the transient against an unconstrained
+run.
 
-**What `cargo test` does NOT cover (honest scope):** the physics itself runs in a WGSL compute shader on the GPU and is **not** unit-tested here. Spring forces, integration, collisions, and the distance constraints are validated **visually** by running the simulation. Testing them automatically would require a **headless GPU harness**: create a `wgpu` device without a surface, run the compute pass for a fixed number of steps, read the buffers back, and assert invariants (no NaNs, bounded energy, particles staying within the distance constraint). That harness does not exist yet and would need an actual GPU (or a software adapter such as `llvmpipe`/WARP) available in CI, so it is out of scope for the current `cargo test`.
+A machine with no adapter skips them with a message rather than failing. CI
+installs Mesa's lavapipe, a Vulkan implementation that runs on the CPU, and one
+test asserts an adapter is present whenever `CI` is set, so a missing rasteriser
+fails the build instead of quietly turning the suite green.
 
-## Limitations and how I would improve this
+The two tests that need 262,144 particles for thousands of steps are ignored by
+default and run nightly: seconds on a real GPU, the whole build on a software
+one.
 
-This started as a course project, and there are several things I would tighten up before calling it production-grade:
+## Limitations
 
-- **GPU physics has no automated tests or benchmarks.** CPU logic and CPU/GPU struct-layout invariants are now covered by `cargo test` (see the Testing section), but the simulation itself is still only verified by eye. I would add a headless mode (run the compute pass without a window) that steps the simulation a fixed number of times and checks invariants (total energy bounded, no NaNs, particles stay within the distance constraint), plus a benchmark that reports steps/second for a given grid size.
-- **Magic numbers should be named constants.** Values like the stiffness multipliers (`4000.0 * 1.5`), the local friction coefficient `cf = 0.9` in the shader, the ground and sphere damping factors (`0.2`, `0.5`), `GRAVITY`, and the initial cloth height `0.5` are scattered across the code. They should be named constants or, better, surfaced as part of the simulation config.
-- **Simulation parameters are not fully centralized.** `PhysicsParams` is built inline in the constructor and the egui panel only exposes a subset (colors, grid size, spacing, point size). Stiffness, damping, mass, friction and sphere radius are defined but not editable at runtime even though the README advertises them. I would move all of these into a single config struct and wire every field to the UI.
-- **The friction coefficient is duplicated.** `PhysicsParams.friction` exists and is uploaded to the GPU, but the compute shader actually uses a hard-coded local `cf = 0.9` instead of reading `physics.friction`. The uniform field is effectively dead. I would make the shader read the uniform so the value has a single source of truth.
-- **A few WGSL bindings are unused.** The `TimeUniform` (binding 2) and the `instances` storage binding in the render shader are declared but never read. They should either be used or removed to make the data flow obvious.
-- **The distance-constraint pass is asymmetric.** Each invocation corrects only its own position and reads its neighbours from the read buffer; the neighbour-side correction computed by `enforce_distance_constraint` is discarded. This is a deliberate simplification to stay race-free in a single pass, but it makes the constraint softer and order-dependent. A cleaner approach would be a separate constraint-relaxation pass (Gauss-Seidel/Jacobi style) with its own ping-pong step.
-- **Self-collision is not handled.** The cloth can pass through itself. Adding spatial hashing on the GPU for broad-phase self-collision would be the natural next step.
-- **Cloth resolution is square and clamped to multiples of the workgroup size.** Non-square cloths and arbitrary resolutions are not supported, and `grid_size` is silently rounded down to a multiple of `WORKGROUP_SIZE`. I would decouple the dispatch size from the grid dimensions.
-- **Workgroup size is fixed at 256 and untuned.** The optimal size is hardware-dependent; I would benchmark a few values (64/128/256) and consider a 2D workgroup layout that maps more naturally onto the 2D grid.
-- **Double-buffering correctness could be made more explicit.** The ping-pong swap is correct for the integration step, but because the same `instances_ping` buffer is read both for spring forces and for the distance constraints within one invocation, the constraint pass operates on pre-integration neighbour positions. Documenting (or restructuring) this ordering would remove a subtle source of confusion.
+- **Self-collision is not handled.** The cloth passes through itself. GPU
+  spatial hashing for the broad phase is the natural next step.
+- **The sheet is square.** Non-square cloths are not supported, though the
+  dispatch no longer constrains the resolution.
+- **The workgroup size is fixed at 256 and untuned.** The best value is
+  hardware-dependent, and a 2D workgroup would map more naturally onto a 2D
+  grid. The benchmark above is the place to settle that with numbers.
+- **The panel exposes a subset of the parameters.** Stiffness, damping, mass,
+  friction and the sphere radius are configurable in code but not in the UI.
+- **The constraint is Jacobi, not Gauss-Seidel.** Each invocation applies half
+  of each spring's excess against neighbours that move in the same pass, so a
+  fixed iteration count leaves a residue: 1.59x against a 1.5x cap at the
+  heaviest supported setting.
+- **The physics has no reference solution.** The tests assert invariants, which
+  catches an exploding or frozen sheet, not a subtly wrong drape.
 
 ## License
 
