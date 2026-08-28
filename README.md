@@ -96,6 +96,8 @@ Use `--release`. A debug build runs the simulation far below real time.
 - **Panel**: pause and resume, pick the cloth and sphere colours, and set the
   grid side (64 to 512), the spacing between particles and the drawn point size.
   Those three need a restart, which the panel offers once something has changed.
+  It also reports the particle count, the steps the last frame ran against the
+  10.4 real time asks for, and a warning once the machine has fallen behind.
 
 The stiffness, damping, mass, friction and sphere radius are part of
 `ClothConfig` and reach the shader as uniforms, but the panel does not expose

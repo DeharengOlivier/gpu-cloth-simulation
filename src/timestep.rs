@@ -21,6 +21,12 @@ pub struct FixedTimestep {
     /// Simulated time owed but not yet run, always less than one step once
     /// [`Self::steps_for`] has returned.
     unspent: f32,
+    /// Simulated seconds dropped at the cap since the clock was built.
+    ///
+    /// Dropping time is the correct response to a hitch, but it is invisible:
+    /// the cloth simply runs slower than the world and nothing says why. This
+    /// is what lets the interface say it.
+    dropped: f32,
 }
 
 impl FixedTimestep {
@@ -44,11 +50,25 @@ impl FixedTimestep {
         let owed = (self.unspent / step) as u32;
         let steps = owed.min(MAX_STEPS_PER_FRAME);
         if steps < owed {
+            self.dropped += self.unspent - steps as f32 * step;
             self.unspent = 0.0;
         } else {
             self.unspent -= steps as f32 * step;
         }
         steps
+    }
+
+    /// Simulated seconds the cap has dropped since this clock was built.
+    ///
+    /// Zero on a machine keeping up. Anything else is the amount by which the
+    /// cloth is behind the world, and it only ever grows.
+    pub fn dropped_seconds(&self) -> f32 {
+        self.dropped
+    }
+
+    /// Whether any simulated time has been dropped.
+    pub fn has_fallen_behind(&self) -> bool {
+        self.dropped > 0.0
     }
 
     /// Simulated time owed but not yet run.
@@ -115,6 +135,47 @@ mod tests {
             clock.unspent()
         );
         assert_eq!(clock.steps_for(STEP * 2.0, STEP), 2);
+    }
+
+    #[test]
+    fn a_clock_that_keeps_up_reports_nothing_dropped() {
+        let mut clock = FixedTimestep::default();
+        for _ in 0..600 {
+            clock.steps_for(1.0 / 60.0, STEP);
+        }
+        assert!(!clock.has_fallen_behind());
+        assert_eq!(clock.dropped_seconds(), 0.0);
+    }
+
+    #[test]
+    fn the_time_a_hitch_drops_is_reported_rather_than_hidden() {
+        // Dropping the surplus is the right response to a hitch, but on its own
+        // it is invisible: the cloth runs slower than the world with nothing
+        // saying why. The count is what the panel shows.
+        let mut clock = FixedTimestep::default();
+        let hitch = 10.0;
+        clock.steps_for(hitch, STEP);
+
+        assert!(clock.has_fallen_behind());
+        let ran = MAX_STEPS_PER_FRAME as f32 * STEP;
+        assert!(
+            (clock.dropped_seconds() - (hitch - ran)).abs() < 1e-3,
+            "dropped {} of the {hitch} second hitch, expected about {}",
+            clock.dropped_seconds(),
+            hitch - ran
+        );
+    }
+
+    #[test]
+    fn dropped_time_accumulates_across_hitches() {
+        let mut clock = FixedTimestep::default();
+        clock.steps_for(10.0, STEP);
+        let after_one = clock.dropped_seconds();
+        clock.steps_for(10.0, STEP);
+        assert!(
+            clock.dropped_seconds() > after_one,
+            "a second hitch did not add to the {after_one} already dropped"
+        );
     }
 
     #[test]

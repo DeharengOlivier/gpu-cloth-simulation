@@ -155,6 +155,8 @@ pub struct InstanceApp {
 
     /// Carries the fraction of a step left over by each frame into the next.
     clock: FixedTimestep,
+    /// Steps run by the last frame, shown in the panel.
+    steps_last_frame: u32,
 }
 
 /// Builds the small sphere drawn once per cloth particle.
@@ -357,6 +359,7 @@ impl InstanceApp {
             pending_settings: settings,
             paused: false,
             clock: FixedTimestep::default(),
+            steps_last_frame: 0,
         }
     }
 
@@ -488,11 +491,31 @@ impl App for InstanceApp {
 
             ui.separator();
             ui.label(format!("Particles: {}", self.simulation.particle_count()));
+            ui.label(format!(
+                "Steps last frame: {} of the {:.1} real time asks for",
+                self.steps_last_frame,
+                1.0 / (FIXED_TIME_STEP_SECONDS * 60.0)
+            ));
+
+            // Dropping simulated time is the right response to a hitch, but on
+            // its own it is invisible: the cloth just runs slower than the world.
+            if self.clock.has_fallen_behind() {
+                ui.colored_label(
+                    egui::Color32::YELLOW,
+                    format!(
+                        "Behind real time by {:.1} s: this machine cannot keep up \
+                         with {} particles",
+                        self.clock.dropped_seconds(),
+                        self.simulation.particle_count()
+                    ),
+                );
+            }
         });
     }
 
     fn update(&mut self, delta_time: f32, context: &Context) {
         if self.paused {
+            self.steps_last_frame = 0;
             return;
         }
 
@@ -500,6 +523,7 @@ impl App for InstanceApp {
         // simulation advances at the same rate whatever the frame rate. The
         // clock keeps the remainder and caps the catch-up; see `timestep`.
         let steps = self.clock.steps_for(delta_time, FIXED_TIME_STEP_SECONDS);
+        self.steps_last_frame = steps;
         for _ in 0..steps {
             self.simulation.step(context.device(), context.queue());
         }
