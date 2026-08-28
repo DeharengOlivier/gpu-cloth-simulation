@@ -16,9 +16,7 @@ use wgpu_bootstrap::{
 
 use crate::timestep::FixedTimestep;
 
-use crate::simulation::{
-    resolve_grid_size, ClothConfig, ClothSimulation, Instance, FIXED_TIME_STEP_SECONDS,
-};
+use crate::simulation::{ClothConfig, ClothSimulation, Instance, FIXED_TIME_STEP_SECONDS};
 
 /// One mesh vertex.
 ///
@@ -456,12 +454,8 @@ impl App for InstanceApp {
                     self.pending_settings.grid_size = grid_val as u32;
                 }
             });
-            // The side length the simulation will actually build.
-            let effective = resolve_grid_size(self.pending_settings.grid_size);
-            ui.label(format!(
-                "  -> {effective} per side, {} particles",
-                effective * effective
-            ));
+            let side = self.pending_settings.grid_size;
+            ui.label(format!("  -> {} particles", side * side));
 
             ui.horizontal(|ui| {
                 ui.label("Spacing:");

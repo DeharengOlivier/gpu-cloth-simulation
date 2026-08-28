@@ -58,6 +58,33 @@ pub const CONSTRAINT_ITERATIONS: u32 = 2;
 /// Coulomb friction coefficient between the cloth and the obstacle sphere.
 pub const DEFAULT_FRICTION: f32 = 0.8;
 
+/// Most relaxation passes a single step may run.
+///
+/// Each pass is a full dispatch over every particle, so this is the frame
+/// budget. Without a ceiling a mistyped value stalls the window rather than
+/// reporting anything.
+pub const MAX_CONSTRAINT_ITERATIONS: u32 = 16;
+
+/// Why a [`ClothConfig`] cannot be simulated.
+///
+/// Carries the setting and what was wrong with it, because the value that
+/// reaches the shader is a long way from wherever it was set.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConfigError {
+    /// The field at fault.
+    pub setting: &'static str,
+    /// What it should have been.
+    pub requirement: &'static str,
+}
+
+impl std::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} must {}", self.setting, self.requirement)
+    }
+}
+
+impl std::error::Error for ConfigError {}
+
 /// One cloth particle, as both the CPU and the GPU see it.
 ///
 /// `#[repr(C)]` gives a stable layout so the two agree on field placement, and
@@ -153,6 +180,59 @@ impl Default for ClothConfig {
 }
 
 impl ClothConfig {
+    /// Checks every setting before any of them reaches the GPU.
+    ///
+    /// This is the boundary. Past it the values are trusted: nothing in the
+    /// shader re-checks that a rest length is positive or that a stretch cap is
+    /// satisfiable, and a value that is neither turns the whole sheet into NaN
+    /// on the first step, a long way from wherever it was set.
+    ///
+    /// Complexity: O(1).
+    pub fn validate(&self) -> Result<(), ConfigError> {
+        let fail = |setting, requirement| {
+            Err(ConfigError {
+                setting,
+                requirement,
+            })
+        };
+
+        if self.grid_size < MIN_GRID_SIZE {
+            return fail(
+                "grid_size",
+                "be at least 2, so the sheet has a spring in it",
+            );
+        }
+        // is_finite is checked first in each case below: it rejects NaN, so the
+        // comparison after it is an ordinary one rather than a negated test
+        // written to catch a value that compares false against everything.
+        if !self.spacing.is_finite() || self.spacing <= 0.0 {
+            return fail("spacing", "be a positive, finite distance");
+        }
+        if !self.initial_height.is_finite() {
+            return fail("initial_height", "be finite");
+        }
+        if !self.sphere_radius.is_finite() || self.sphere_radius < 0.0 {
+            return fail("sphere_radius", "be finite and not negative");
+        }
+        if !self.max_spring_stretch.is_finite() || self.max_spring_stretch <= 1.0 {
+            return fail(
+                "max_spring_stretch",
+                "be finite and greater than 1, or no spring can ever satisfy it",
+            );
+        }
+        if !(0.0..=1.0).contains(&self.friction) {
+            return fail("friction", "be within 0 and 1");
+        }
+        if self.constraint_iterations > MAX_CONSTRAINT_ITERATIONS {
+            return fail(
+                "constraint_iterations",
+                "not exceed MAX_CONSTRAINT_ITERATIONS, since each pass costs a \
+                 dispatch over every particle",
+            );
+        }
+        Ok(())
+    }
+
     /// The physics parameters this configuration implies.
     ///
     /// `rest_length` is the grid spacing, so a freshly generated cloth starts
@@ -169,27 +249,13 @@ impl ClothConfig {
             friction: self.friction,
             sphere_radius: self.sphere_radius,
             max_spring_stretch: self.max_spring_stretch,
-            grid_size: resolve_grid_size(self.grid_size),
+            grid_size: self.grid_size,
         }
     }
 }
 
 /// The smallest grid that has a spring in it at all.
 pub const MIN_GRID_SIZE: u32 = 2;
-
-/// The grid side actually built for a requested one.
-///
-/// It used to round down to a multiple of [`WORKGROUP_SIZE`] so the dispatch
-/// divided evenly, which turned every request under 256 into 256: the slider
-/// offered a 64 x 64 sheet and ran a 256 x 256 one. The dispatch now rounds the
-/// *workgroup count* up instead and the shader discards the surplus invocations,
-/// so any side works and the only adjustment left is the floor below which there
-/// are no springs to simulate.
-///
-/// Complexity: O(1).
-pub fn resolve_grid_size(grid_size: u32) -> u32 {
-    grid_size.max(MIN_GRID_SIZE)
-}
 
 /// Builds the particles of a `rows` x `cols` grid centred on the origin, flat at
 /// height `displacement`, every one of them at rest.
@@ -232,10 +298,20 @@ pub struct ClothSimulation {
 impl ClothSimulation {
     /// Builds every GPU resource the physics step needs.
     ///
-    /// The grid side passes through [`resolve_grid_size`]; [`Self::grid_size`]
-    /// reports what was actually built.
+    /// The grid side is the one asked for: it used to be rounded down to a
+    /// multiple of [`WORKGROUP_SIZE`], so a request for 64 built 256.
+    ///
+    /// # Panics
+    ///
+    /// If the configuration does not pass [`ClothConfig::validate`]. Every
+    /// setting the interface can produce is valid, so reaching this is a
+    /// programming error rather than something a user can do, and failing here
+    /// beats a sheet that turns into NaN on its first step.
     pub fn new(device: &wgpu::Device, config: &ClothConfig) -> Self {
-        let grid_size = resolve_grid_size(config.grid_size);
+        if let Err(problem) = config.validate() {
+            panic!("cannot simulate this cloth: {problem}");
+        }
+        let grid_size = config.grid_size;
         let instances =
             generate_instances(grid_size, grid_size, config.spacing, config.initial_height);
         let particle_count = instances.len() as u32;
@@ -628,23 +704,126 @@ mod tests {
         );
     }
 
+    // ---- configuration is checked at the boundary ----
+
+    fn valid() -> ClothConfig {
+        ClothConfig::default()
+    }
+
+    #[test]
+    fn the_default_configuration_is_valid() {
+        assert!(valid().validate().is_ok());
+    }
+
+    #[test]
+    fn a_spacing_that_is_not_a_positive_distance_is_rejected() {
+        // rest_length reaches the shader as a divisor and as the length every
+        // spring is measured against. Zero or negative turns the whole sheet
+        // into NaN on the first step, far from the line that allowed it.
+        for spacing in [0.0, -0.006, f32::NAN, f32::INFINITY] {
+            let config = ClothConfig { spacing, ..valid() };
+            let message = config
+                .validate()
+                .expect_err(&format!("spacing {spacing} must be rejected"))
+                .to_string();
+            assert!(message.contains("spacing"), "message was {message:?}");
+        }
+    }
+
+    #[test]
+    fn a_grid_smaller_than_one_spring_is_rejected() {
+        for grid_size in [0, 1] {
+            let config = ClothConfig {
+                grid_size,
+                ..valid()
+            };
+            assert!(
+                config.validate().is_err(),
+                "grid {grid_size} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn a_stretch_cap_below_the_rest_length_is_rejected() {
+        // A cap under 1.0 asks every spring to be shorter than it is at rest,
+        // so the constraint can never be satisfied and never stops firing.
+        for max_spring_stretch in [0.9, 1.0, 0.0, f32::NAN] {
+            let config = ClothConfig {
+                max_spring_stretch,
+                ..valid()
+            };
+            assert!(
+                config.validate().is_err(),
+                "cap {max_spring_stretch} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn a_friction_coefficient_outside_its_range_is_rejected() {
+        for friction in [-0.1, 1.1, f32::NAN] {
+            let config = ClothConfig {
+                friction,
+                ..valid()
+            };
+            assert!(
+                config.validate().is_err(),
+                "friction {friction} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn a_negative_sphere_radius_is_rejected() {
+        let config = ClothConfig {
+            sphere_radius: -0.4,
+            ..valid()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn a_release_height_that_is_not_a_number_is_rejected() {
+        let config = ClothConfig {
+            initial_height: f32::NAN,
+            ..valid()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn an_unbounded_number_of_relaxation_passes_is_rejected() {
+        // Each pass is a full dispatch over every particle, so this is the frame
+        // budget. An accidental large value stalls the window rather than erroring.
+        let config = ClothConfig {
+            constraint_iterations: MAX_CONSTRAINT_ITERATIONS + 1,
+            ..valid()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn every_setting_the_interface_offers_is_valid() {
+        // The sliders are the only boundary a user reaches. Every position they
+        // can be left in has to produce a configuration the simulation accepts.
+        for grid_size in (64..=512).step_by(64) {
+            for step in 2..=20 {
+                let config = ClothConfig {
+                    grid_size,
+                    spacing: step as f32 / 1000.0,
+                    ..valid()
+                };
+                assert!(
+                    config.validate().is_ok(),
+                    "grid {grid_size} at spacing {} is rejected",
+                    config.spacing
+                );
+            }
+        }
+    }
+
     // ---- the grid side the caller asks for ----
-
-    #[test]
-    fn the_requested_grid_side_is_the_one_used() {
-        // It used to round down to a multiple of WORKGROUP_SIZE, so every side
-        // under 256 silently became 256.
-        for requested in [2u32, 3, 63, 64, 100, 255, 256, 300, 512, 1000] {
-            assert_eq!(resolve_grid_size(requested), requested);
-        }
-    }
-
-    #[test]
-    fn a_grid_too_small_to_hold_a_spring_is_raised_to_one_that_can() {
-        for requested in [0, 1] {
-            assert_eq!(resolve_grid_size(requested), MIN_GRID_SIZE);
-        }
-    }
 
     #[test]
     fn the_dispatch_covers_every_particle_and_wastes_at_most_one_workgroup() {
@@ -715,9 +894,8 @@ mod tests {
     #[test]
     fn the_default_configuration_is_dispatch_safe() {
         let config = ClothConfig::default();
-        let side = resolve_grid_size(config.grid_size);
-        assert_eq!(side, 256);
-        assert!(side * side >= WORKGROUP_SIZE);
+        assert_eq!(config.grid_size, 256);
+        assert!(config.grid_size * config.grid_size >= WORKGROUP_SIZE);
     }
 
     #[test]
