@@ -14,10 +14,13 @@ path = "src/main.rs"
 [dependencies]
 wgpu-bootstrap = { git = "https://github.com/qlurkin/wgpu-bootstrap", tag = "v0.4.2" }
 bytemuck = { version = "1.18", features = ["derive"] }
+# wgpu hands back an adapter and a device as futures. The headless constructor
+# has to be callable from a test, a benchmark and a plain program, none of which
+# run an async runtime, so it blocks on them with the smallest thing that can.
+pollster = "0.3"
 
 [dev-dependencies]
-# The headless harness talks to wgpu directly, with no window and no surface.
-# Pinned to the version wgpu-bootstrap already resolves, so there is one copy of
-# the API in the build, not two.
+# The test harness talks to wgpu directly, with no window and no surface. Pinned
+# to the version wgpu-bootstrap already resolves, so there is one copy of the API
+# in the build, not two.
 wgpu = "22.1"
-pollster = "0.3"

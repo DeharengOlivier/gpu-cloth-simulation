@@ -1,57 +1,8 @@
-//! A wgpu device with no window and no surface, so the compute shader can be
-//! run and its output read back inside `cargo test`.
-//!
-//! Every backend wgpu supports can do this: Metal and Vulkan on real hardware,
-//! and Mesa's lavapipe software rasteriser on a CI runner with no GPU at all.
+//! Shared helpers for the physics tests: a headless device, a small cloth, and
+//! the measurements the invariants are stated in.
 
+pub use gpu_cloth_simulation::headless::Gpu;
 use gpu_cloth_simulation::simulation::{ClothConfig, ClothSimulation, Instance};
-use gpu_cloth_simulation::wgpu;
-use pollster::FutureExt;
-
-/// A headless device and queue.
-pub struct Gpu {
-    pub device: wgpu::Device,
-    pub queue: wgpu::Queue,
-    /// What the adapter reported, so a failure names the backend it happened on.
-    pub description: String,
-}
-
-impl Gpu {
-    /// Acquires a headless adapter, or reports that there is none.
-    ///
-    /// Returns `None` rather than panicking so a developer with no usable
-    /// adapter gets a skipped test with a reason instead of a red suite. CI
-    /// installs a software adapter and asserts one is present, so "no adapter"
-    /// can never quietly mean "physics untested" there.
-    pub fn new() -> Option<Self> {
-        let instance = wgpu::Instance::default();
-        let adapter = instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: None,
-                force_fallback_adapter: false,
-            })
-            .block_on()?;
-        let info = adapter.get_info();
-        let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("Headless Test Device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::downlevel_defaults(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                },
-                None,
-            )
-            .block_on()
-            .ok()?;
-        Some(Self {
-            device,
-            queue,
-            description: format!("{:?} / {}", info.backend, info.name),
-        })
-    }
-}
 
 /// Runs a simulation for `steps` fixed time steps and returns the final state.
 pub fn simulate(gpu: &Gpu, config: &ClothConfig, steps: u32) -> Vec<Instance> {

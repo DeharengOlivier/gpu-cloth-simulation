@@ -9,8 +9,13 @@
 //! - [`app`] is the interactive program built on top: window, camera, egui panel
 //!   and the render pipelines. It depends on `simulation`; `simulation` knows
 //!   nothing about it.
+//!
+//! [`headless`] supplies a device with no window attached, which is how the
+//! physics is tested and benchmarked. [`timestep`] turns elapsed frame time into
+//! whole physics steps and is plain arithmetic, testable without a device.
 
 pub mod app;
+pub mod headless;
 pub mod simulation;
 pub mod timestep;
 
