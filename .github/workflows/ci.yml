@@ -5,17 +5,45 @@ on:
     branches: [main]
   pull_request:
 
+# A second push to the same branch cancels the run it supersedes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  check:
+  quality:
+    name: Format, lints and CPU tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: System dependencies for eframe
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxkbcommon-dev
       - name: Format
         run: cargo fmt --check
-      - name: Clippy
-        run: cargo clippy -- -D warnings
-      - name: Test (CPU-only)
-        run: cargo test
+      - name: Lints
+        # --all-targets, because the previous version checked only the binary
+        # and let every warning in the test module through.
+        run: cargo clippy --all-targets -- -D warnings
+      - name: CPU tests
+        run: cargo test --lib --bins
+
+  audit:
+    name: Dependency advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}

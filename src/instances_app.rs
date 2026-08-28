@@ -3,17 +3,18 @@
 // ============================================================================
 
 // wgpu_bootstrap: thin framework over WebGPU/wgpu (window, device, frame loop, egui).
+use std::time::{Duration, Instant};
 use wgpu_bootstrap::{
     cgmath::{self, InnerSpace}, // 3D math (vectors, matrices)
     egui,                       // Immediate-mode GUI library
     util::{
-        geometry::icosphere,    // Generates a subdivided sphere (icosphere)
+        geometry::icosphere, // Generates a subdivided sphere (icosphere)
         orbit_camera::{CameraUniform, OrbitCamera}, // Orbit camera for 3D navigation
     },
     wgpu::{self, util::DeviceExt}, // WebGPU API
-    App, Context,                  // Framework trait and context type
-};
-use std::time::{Duration, Instant}; // Timing for the physics loop
+    App,
+    Context, // Framework trait and context type
+}; // Timing for the physics loop
 
 // ============================================================================
 // GPU DATA STRUCTURES
@@ -27,9 +28,9 @@ use std::time::{Duration, Instant}; // Timing for the physics loop
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
-    position: [f32; 3],  // Position (x, y, z) in 3D space
-    normal: [f32; 3],    // Normal for lighting (unused by the cloth, used by the sphere)
-    color: [f32; 3],     // RGB color (each component in 0.0..=1.0)
+    position: [f32; 3], // Position (x, y, z) in 3D space
+    normal: [f32; 3],   // Normal for lighting (unused by the cloth, used by the sphere)
+    color: [f32; 3],    // RGB color (each component in 0.0..=1.0)
 }
 
 impl Vertex {
@@ -47,20 +48,20 @@ impl Vertex {
             attributes: &[
                 // Attribute 0: position
                 wgpu::VertexAttribute {
-                    offset: 0,  // Start of the struct
-                    shader_location: 0,  // Matches @location(0) in the shader
-                    format: wgpu::VertexFormat::Float32x3,  // 3 floats (x, y, z)
+                    offset: 0,                             // Start of the struct
+                    shader_location: 0,                    // Matches @location(0) in the shader
+                    format: wgpu::VertexFormat::Float32x3, // 3 floats (x, y, z)
                 },
                 // Attribute 1: normal
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,  // After position (12 bytes)
-                    shader_location: 1,  // @location(1)
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress, // After position (12 bytes)
+                    shader_location: 1,                                             // @location(1)
                     format: wgpu::VertexFormat::Float32x3,
                 },
                 // Attribute 2: color
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,  // After position + normal (24 bytes)
-                    shader_location: 2,  // @location(2)
+                    offset: std::mem::size_of::<[f32; 6]>() as wgpu::BufferAddress, // After position + normal (24 bytes)
+                    shader_location: 2,                                             // @location(2)
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],
@@ -76,10 +77,10 @@ impl Vertex {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Instance {
-    position: [f32; 4],  // Particle position (x, y, z) + 1 float of padding
-    speed: [f32; 4],     // Particle velocity (vx, vy, vz) + padding
-                         // vec4 is used so each field is 16-byte aligned for the GPU,
-                         // matching the vec4 layout of Instance in compute.wgsl.
+    position: [f32; 4], // Particle position (x, y, z) + 1 float of padding
+    speed: [f32; 4],    // Particle velocity (vx, vy, vz) + padding
+                        // vec4 is used so each field is 16-byte aligned for the GPU,
+                        // matching the vec4 layout of Instance in compute.wgsl.
 }
 
 impl Instance {
@@ -98,13 +99,13 @@ impl Instance {
                 // Instance position
                 wgpu::VertexAttribute {
                     offset: 0,
-                    shader_location: 3,  // @location(3) in the shader
-                    format: wgpu::VertexFormat::Float32x3,  // The 4th (padding) component is ignored
+                    shader_location: 3, // @location(3) in the shader
+                    format: wgpu::VertexFormat::Float32x3, // The 4th (padding) component is ignored
                 },
                 // Instance velocity (not used by the render shader, but kept for the compute layout)
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32;3]>() as wgpu::BufferAddress,
-                    shader_location: 4,  // @location(4) in the shader
+                    offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+                    shader_location: 4, // @location(4) in the shader
                     format: wgpu::VertexFormat::Float32x3,
                 },
             ],
@@ -117,7 +118,7 @@ impl Instance {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct TimeUniform {
-    generation_duration: f32,  // Duration of a generated frame
+    generation_duration: f32, // Duration of a generated frame
 }
 
 /// Physics simulation parameters, uploaded as a uniform buffer.
@@ -129,15 +130,15 @@ struct TimeUniform {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct PhysicsParams {
-    structural_k: f32,    // Structural spring stiffness (direct neighbours)
-    shear_k: f32,         // Shear spring stiffness (diagonals)
-    bend_k: f32,          // Bend spring stiffness (two cells apart)
-    damping: f32,         // Damping coefficient (prevents endless oscillation)
-    mass: f32,            // Mass of each particle (for F = m*a)
-    rest_length: f32,     // Spring rest length (natural distance between particles)
-    dt: f32,              // Time step of the simulation
-    friction: f32,        // Friction coefficient with the sphere
-    sphere_radius: f32,   // Radius of the collision sphere
+    structural_k: f32,  // Structural spring stiffness (direct neighbours)
+    shear_k: f32,       // Shear spring stiffness (diagonals)
+    bend_k: f32,        // Bend spring stiffness (two cells apart)
+    damping: f32,       // Damping coefficient (prevents endless oscillation)
+    mass: f32,          // Mass of each particle (for F = m*a)
+    rest_length: f32,   // Spring rest length (natural distance between particles)
+    dt: f32,            // Time step of the simulation
+    friction: f32,      // Friction coefficient with the sphere
+    sphere_radius: f32, // Radius of the collision sphere
 }
 
 // ============================================================================
@@ -150,22 +151,22 @@ struct PhysicsParams {
 /// buffers; colors can be updated in place.
 #[derive(Clone)]
 pub struct ClothSettings {
-    pub grid_size: u32,        // N for the NxN grid (particles per side)
-    pub spacing: f32,          // Distance between adjacent particles
-    pub point_size: f32,       // Render size of each particle (radius of its mini-sphere)
-    pub cloth_color: [f32; 3], // Cloth RGB color
-    pub sphere_color: [f32; 3],// Central sphere RGB color
+    pub grid_size: u32,         // N for the NxN grid (particles per side)
+    pub spacing: f32,           // Distance between adjacent particles
+    pub point_size: f32,        // Render size of each particle (radius of its mini-sphere)
+    pub cloth_color: [f32; 3],  // Cloth RGB color
+    pub sphere_color: [f32; 3], // Central sphere RGB color
 }
 
 impl Default for ClothSettings {
     /// Default parameter values.
     fn default() -> Self {
         Self {
-            grid_size: 256,              // 256x256 grid = 65,536 particles
-            spacing: 0.006,              // 6 mm between particles
-            point_size: 0.0033,          // Visualization sphere radius
-            cloth_color: [1.0, 0.0, 0.0],// Red
-            sphere_color: [0.5, 0.5, 0.5],// Grey
+            grid_size: 256,                // 256x256 grid = 65,536 particles
+            spacing: 0.006,                // 6 mm between particles
+            point_size: 0.0033,            // Visualization sphere radius
+            cloth_color: [1.0, 0.0, 0.0],  // Red
+            sphere_color: [0.5, 0.5, 0.5], // Grey
         }
     }
 }
@@ -178,20 +179,20 @@ impl Default for ClothSettings {
 /// needed to simulate and render the cloth. Implements wgpu_bootstrap's App trait.
 pub struct InstanceApp {
     // === Cloth GPU buffers ===
-    vertex_buffer: wgpu::Buffer,        // Geometry of the mini-spheres (vertices)
+    vertex_buffer: wgpu::Buffer, // Geometry of the mini-spheres (vertices)
     instance_buffer: [wgpu::Buffer; 2], // Particle position/velocity (ping-pong pair)
-    index_buffer: wgpu::Buffer,         // Triangle indices
+    index_buffer: wgpu::Buffer,  // Triangle indices
 
     // === Render and compute pipelines ===
     render_pipeline: wgpu::RenderPipeline,   // Draws the cloth
     compute_pipeline: wgpu::ComputePipeline, // Runs the physics step
 
     // === Metadata ===
-    num_indices: u32,      // Number of indices to draw per cloth particle
-    num_instances: u32,    // Number of particles (instances)
+    num_indices: u32,   // Number of indices to draw per cloth particle
+    num_instances: u32, // Number of particles (instances)
 
     // === Camera ===
-    camera: OrbitCamera,   // Mouse-controllable orbit camera
+    camera: OrbitCamera,      // Mouse-controllable orbit camera
     last_generation: Instant, // Timestamp of the last simulation step (timing)
 
     // === Bind groups ===
@@ -243,7 +244,13 @@ fn generate_grid(
     displacement: f32,
     sphere_scale: f32,
     cloth_color: [f32; 3],
-) -> (Vec<Vertex>, wgpu::Buffer, Vec<Instance>, Vec<Instance>, Vec<u32>) {
+) -> (
+    Vec<Vertex>,
+    wgpu::Buffer,
+    Vec<Instance>,
+    Vec<Instance>,
+    Vec<u32>,
+) {
     // Generate a subdivided sphere (icosphere, subdivision level 2).
     // Higher level = smoother sphere but more triangles per particle.
     let (positions, indices) = icosphere(2);
@@ -389,16 +396,16 @@ impl InstanceApp {
 
         // Generate the vertices (mini-sphere geometry) and instances (particles).
         let (vertices, index_buffer, instances, instances_copy, indices) = generate_grid(
-            &context,
-            grid_size,       // Rows
-            grid_size,       // Columns
-            settings.spacing,// Distance between particles
-            0.5,             // Initial height
-            settings.point_size, // Visualization sphere radius
+            context,
+            grid_size,            // Rows
+            grid_size,            // Columns
+            settings.spacing,     // Distance between particles
+            0.5,                  // Initial height
+            settings.point_size,  // Visualization sphere radius
             settings.cloth_color, // Color
         );
 
-        let num_indices = indices.len() as u32;     // Indices to draw per particle
+        let num_indices = indices.len() as u32; // Indices to draw per particle
         let num_instances = instances.len() as u32; // Total particle count
 
         // === STEP 2: UNIFORM BUFFERS ===
@@ -410,23 +417,26 @@ impl InstanceApp {
 
         // Uniform buffer (constant during a draw/compute call).
         // COPY_DST lets us update it later via queue.write_buffer().
-        let time_buffer = context.device().create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Time Uniform Buffer"),
-            contents: bytemuck::cast_slice(&[time_uniform]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        let time_buffer = context
+            .device()
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Time Uniform Buffer"),
+                contents: bytemuck::cast_slice(&[time_uniform]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
 
         // === STEP 3: VERTEX AND INSTANCE BUFFERS ===
 
         // Vertex buffer: mini-sphere geometry shared by every particle.
         // VERTEX = used as vertex input; COPY_DST = color can be updated in place.
-        let vertex_buffer = context
-            .device()
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Buffer"),
-                contents: bytemuck::cast_slice(vertices.as_slice()),
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            });
+        let vertex_buffer =
+            context
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Vertex Buffer"),
+                    contents: bytemuck::cast_slice(vertices.as_slice()),
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                });
 
         // === PING-PONG BUFFERS ===
         //
@@ -443,7 +453,7 @@ impl InstanceApp {
                 .device()
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Instance Buffer Ping"),
-                    contents: bytemuck::cast_slice(&instances.as_slice()),
+                    contents: bytemuck::cast_slice(instances.as_slice()),
                     // STORAGE = read/write in the compute shader.
                     // VERTEX = usable as instanced vertex data.
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
@@ -452,7 +462,7 @@ impl InstanceApp {
                 .device()
                 .create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("Instance Buffer Pong"),
-                    contents: bytemuck::cast_slice(&instances_copy.as_slice()),
+                    contents: bytemuck::cast_slice(instances_copy.as_slice()),
                     usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::VERTEX,
                 }),
         ];
@@ -464,48 +474,52 @@ impl InstanceApp {
 
         // Force coefficients and behavior of the simulation.
         let physics_params = PhysicsParams {
-            structural_k: 4000.0 * 1.5,  // Structural stiffness (direct links)
-            shear_k: 2000.0 * 1.5,       // Shear stiffness (diagonals)
-            bend_k: 300.0 * 1.5,         // Bend stiffness (two cells apart)
-            damping: 0.1,                // Damping (dissipates energy)
-            mass: 0.1,                   // Mass per particle
+            structural_k: 4000.0 * 1.5,    // Structural stiffness (direct links)
+            shear_k: 2000.0 * 1.5,         // Shear stiffness (diagonals)
+            bend_k: 300.0 * 1.5,           // Bend stiffness (two cells apart)
+            damping: 0.1,                  // Damping (dissipates energy)
+            mass: 0.1,                     // Mass per particle
             rest_length: settings.spacing, // Must equal spacing so the grid starts relaxed
-            dt: TAYME,                   // Time step
-            friction: 0.8,               // Friction with the sphere
-            sphere_radius: sphere_radius,// Collision radius
+            dt: TAYME,                     // Time step
+            friction: 0.8,                 // Friction with the sphere
+            sphere_radius,                 // Collision radius
         };
 
         // Uniform buffer for the physics parameters.
-        let physics_buffer = context.device().create_buffer_init(
-            &wgpu::util::BufferInitDescriptor {
-                label: Some("Physics Params Buffer"),
-                contents: bytemuck::cast_slice(&[physics_params]),
-                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-            }
-        );
+        let physics_buffer =
+            context
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Physics Params Buffer"),
+                    contents: bytemuck::cast_slice(&[physics_params]),
+                    usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                });
 
         // === STEP 5: OBSTACLE SPHERE ===
 
         // Build the sphere with the color from the settings.
-        let (sphere_vertices, sphere_indices) = create_sphere_vertices(sphere_radius, settings.sphere_color);
+        let (sphere_vertices, sphere_indices) =
+            create_sphere_vertices(sphere_radius, settings.sphere_color);
 
         // Sphere buffers (static, no instancing).
-        let sphere_vertex_buffer = context
-            .device()
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Sphere Vertex Buffer"),
-                contents: bytemuck::cast_slice(sphere_vertices.as_slice()),
-                // COPY_DST: lets the color be updated in place.
-                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            });
+        let sphere_vertex_buffer =
+            context
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Sphere Vertex Buffer"),
+                    contents: bytemuck::cast_slice(sphere_vertices.as_slice()),
+                    // COPY_DST: lets the color be updated in place.
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                });
 
-        let sphere_index_buffer = context
-            .device()
-            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Sphere Index Buffer"),
-                contents: bytemuck::cast_slice(sphere_indices.as_slice()),
-                usage: wgpu::BufferUsages::INDEX,
-            });
+        let sphere_index_buffer =
+            context
+                .device()
+                .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Sphere Index Buffer"),
+                    contents: bytemuck::cast_slice(sphere_indices.as_slice()),
+                    usage: wgpu::BufferUsages::INDEX,
+                });
 
         // === STEP 6: SHADER COMPILATION ===
 
@@ -526,7 +540,7 @@ impl InstanceApp {
                 source: wgpu::ShaderSource::Wgsl(
                     include_str!("compute.wgsl")
                         .replace("WORKGROUP_SIZE", &format!("{}", WORKGROUP_SIZE))
-                        .into()
+                        .into(),
                 ),
             });
 
@@ -541,135 +555,143 @@ impl InstanceApp {
             .create_bind_group_layout(&CameraUniform::desc());
 
         // Layout for the compute shader, with 4 bindings:
-        let instance_bind_group_layout = context.device().create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Compute Bind Group Layout"),
-            entries: &[
-                // Binding 0: instance read buffer (ping)
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::COMPUTE, // Compute stage only
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false }, // read_write storage
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                // Binding 1: instance write buffer (pong)
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage { read_only: false },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                // Binding 2: time uniform (currently unused)
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform, // Uniform = read-only, constant
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                // Binding 3: physics parameters
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::COMPUTE,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-        });
+        let instance_bind_group_layout =
+            context
+                .device()
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Compute Bind Group Layout"),
+                    entries: &[
+                        // Binding 0: instance read buffer (ping)
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 0,
+                            visibility: wgpu::ShaderStages::COMPUTE, // Compute stage only
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false }, // read_write storage
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        // Binding 1: instance write buffer (pong)
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 1,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Storage { read_only: false },
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        // Binding 2: time uniform (currently unused)
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 2,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform, // Uniform = read-only, constant
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                        // Binding 3: physics parameters
+                        wgpu::BindGroupLayoutEntry {
+                            binding: 3,
+                            visibility: wgpu::ShaderStages::COMPUTE,
+                            ty: wgpu::BindingType::Buffer {
+                                ty: wgpu::BufferBindingType::Uniform,
+                                has_dynamic_offset: false,
+                                min_binding_size: None,
+                            },
+                            count: None,
+                        },
+                    ],
+                });
 
         // === STEP 8: PIPELINE LAYOUTS ===
         //
         // A pipeline layout fixes which bind groups a pipeline uses and in what order.
 
         // Render pipeline layout (cloth): uses only the camera at bind group 0.
-        let pipeline_layout = context
-            .device()
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[&camera_bind_group_layout], // Bind group 0 = camera
-                push_constant_ranges: &[], // No push constants
-            });
+        let pipeline_layout =
+            context
+                .device()
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Render Pipeline Layout"),
+                    bind_group_layouts: &[&camera_bind_group_layout], // Bind group 0 = camera
+                    push_constant_ranges: &[],                        // No push constants
+                });
 
         // Compute pipeline layout (physics): instance buffers + params at bind group 0.
-        let compute_pipeline_layout = context.device().create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Compute Pipeline Layout"),
-            bind_group_layouts: &[&instance_bind_group_layout], // Bind group 0 = instances + params
-            push_constant_ranges: &[], // No push constants
-        });
+        let compute_pipeline_layout =
+            context
+                .device()
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Compute Pipeline Layout"),
+                    bind_group_layouts: &[&instance_bind_group_layout], // Bind group 0 = instances + params
+                    push_constant_ranges: &[],                          // No push constants
+                });
 
         // === STEP 9: RENDER PIPELINE ===
         //
         // The render pipeline is the full configuration that turns vertices into
         // pixels on screen.
-        let render_pipeline = context
-            .device()
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Render Pipeline"),
-                layout: Some(&pipeline_layout), // Layout defined above
+        let render_pipeline =
+            context
+                .device()
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("Render Pipeline"),
+                    layout: Some(&pipeline_layout), // Layout defined above
 
-                // Vertex stage: transforms 3D positions into clip space.
-                vertex: wgpu::VertexState {
-                    module: &shader,              // Compiled WGSL module
-                    entry_point: "vs_main",       // Vertex entry point
-                    buffers: &[Vertex::desc(), Instance::desc()], // Two buffers: geometry + instances
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                },
+                    // Vertex stage: transforms 3D positions into clip space.
+                    vertex: wgpu::VertexState {
+                        module: &shader,                              // Compiled WGSL module
+                        entry_point: "vs_main",                       // Vertex entry point
+                        buffers: &[Vertex::desc(), Instance::desc()], // Two buffers: geometry + instances
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    },
 
-                // Fragment stage: computes each pixel's color.
-                fragment: Some(wgpu::FragmentState {
-                    module: &shader,
-                    entry_point: "fs_main",       // Fragment entry point
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: context.format(),          // Surface format (e.g. BGRA8)
-                        blend: Some(wgpu::BlendState::REPLACE), // No blending, overwrite
-                        write_mask: wgpu::ColorWrites::ALL,     // Write full RGBA
-                    })],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                }),
+                    // Fragment stage: computes each pixel's color.
+                    fragment: Some(wgpu::FragmentState {
+                        module: &shader,
+                        entry_point: "fs_main", // Fragment entry point
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: context.format(),               // Surface format (e.g. BGRA8)
+                            blend: Some(wgpu::BlendState::REPLACE), // No blending, overwrite
+                            write_mask: wgpu::ColorWrites::ALL,     // Write full RGBA
+                        })],
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    }),
 
-                // Primitive assembly (triangles).
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList, // Triangle list
-                    strip_index_format: None,                        // Not a triangle strip
-                    front_face: wgpu::FrontFace::Ccw,                // Counter-clockwise = front face
-                    cull_mode: Some(wgpu::Face::Back),               // Cull back faces (optimization)
-                    polygon_mode: wgpu::PolygonMode::Fill,           // Filled triangles (not wireframe)
-                    unclipped_depth: false,
-                    conservative: false,
-                },
+                    // Primitive assembly (triangles).
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList, // Triangle list
+                        strip_index_format: None,                        // Not a triangle strip
+                        front_face: wgpu::FrontFace::Ccw, // Counter-clockwise = front face
+                        cull_mode: Some(wgpu::Face::Back), // Cull back faces (optimization)
+                        polygon_mode: wgpu::PolygonMode::Fill, // Filled triangles (not wireframe)
+                        unclipped_depth: false,
+                        conservative: false,
+                    },
 
-                // Depth test: discards fragments hidden behind closer ones.
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: context.depth_stencil_format(),
-                    depth_write_enabled: true,                      // Write to the depth buffer
-                    depth_compare: wgpu::CompareFunction::Less,     // Keep the nearest fragment
-                    stencil: wgpu::StencilState::default(),         // No stencil
-                    bias: wgpu::DepthBiasState::default(),
-                }),
+                    // Depth test: discards fragments hidden behind closer ones.
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: context.depth_stencil_format(),
+                        depth_write_enabled: true, // Write to the depth buffer
+                        depth_compare: wgpu::CompareFunction::Less, // Keep the nearest fragment
+                        stencil: wgpu::StencilState::default(), // No stencil
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
 
-                // Multisampling (anti-aliasing) disabled here.
-                multisample: wgpu::MultisampleState {
-                    count: 1,                       // No MSAA
-                    mask: !0,                       // All samples active
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview: None,  // No stereo rendering (VR)
-                cache: None,      // No pipeline cache
-            });
+                    // Multisampling (anti-aliasing) disabled here.
+                    multisample: wgpu::MultisampleState {
+                        count: 1, // No MSAA
+                        mask: !0, // All samples active
+                        alpha_to_coverage_enabled: false,
+                    },
+                    multiview: None, // No stereo rendering (VR)
+                    cache: None,     // No pipeline cache
+                });
 
         // === STEP 10: CAMERA SETUP ===
         //
@@ -677,11 +699,10 @@ impl InstanceApp {
         // the scene from any angle.
         let aspect = context.size().x / context.size().y; // Window width/height ratio
         let mut camera = OrbitCamera::new(
-            context,
-            45.0,    // Field of view, in degrees
-            aspect,  // Aspect ratio (avoids distortion)
-            0.1,     // Near plane
-            100.0    // Far plane
+            context, 45.0,   // Field of view, in degrees
+            aspect, // Aspect ratio (avoids distortion)
+            0.1,    // Near plane
+            100.0,  // Far plane
         );
         // Place the camera 1.5 units from the center (polar coordinates).
         camera
@@ -692,16 +713,17 @@ impl InstanceApp {
         //
         // A compute pipeline configures a parallel GPU computation. It is simpler
         // than a render pipeline: no vertex/fragment stages, just the kernel.
-        let compute_pipeline = context
-            .device()
-            .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-                label: Some("Compute Pipeline"),
-                layout: Some(&compute_pipeline_layout), // Layout with instances + params
-                module: &compute_shader,                // Physics WGSL module
-                entry_point: "computeMain",             // @compute entry point
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                cache: None,
-            });
+        let compute_pipeline =
+            context
+                .device()
+                .create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+                    label: Some("Compute Pipeline"),
+                    layout: Some(&compute_pipeline_layout), // Layout with instances + params
+                    module: &compute_shader,                // Physics WGSL module
+                    entry_point: "computeMain",             // @compute entry point
+                    compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    cache: None,
+                });
 
         // === STEP 12: BIND GROUPS (PING-PONG) ===
         //
@@ -722,21 +744,21 @@ impl InstanceApp {
                     layout: &instance_bind_group_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
-                            binding: 0,  // Binding 0 = READ buffer
+                            binding: 0, // Binding 0 = READ buffer
                             resource: instance_buffer[0].as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
-                            binding: 1,  // Binding 1 = WRITE buffer
+                            binding: 1, // Binding 1 = WRITE buffer
                             resource: instance_buffer[1].as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
-                            binding: 2,  // Time uniform (unused)
+                            binding: 2, // Time uniform (unused)
                             resource: time_buffer.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
-                            binding: 3,  // Physics parameters
+                            binding: 3, // Physics parameters
                             resource: physics_buffer.as_entire_binding(),
-                        }
+                        },
                     ],
                 }),
             // === PONG BIND GROUP ===
@@ -748,21 +770,21 @@ impl InstanceApp {
                     layout: &instance_bind_group_layout,
                     entries: &[
                         wgpu::BindGroupEntry {
-                            binding: 0,  // READ buffer (now buffer[1])
+                            binding: 0, // READ buffer (now buffer[1])
                             resource: instance_buffer[1].as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
-                            binding: 1,  // WRITE buffer (now buffer[0])
+                            binding: 1, // WRITE buffer (now buffer[0])
                             resource: instance_buffer[0].as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
-                            binding: 2,  // Time uniform (same)
+                            binding: 2, // Time uniform (same)
                             resource: time_buffer.as_entire_binding(),
                         },
                         wgpu::BindGroupEntry {
-                            binding: 3,  // Physics parameters (same)
+                            binding: 3, // Physics parameters (same)
                             resource: physics_buffer.as_entire_binding(),
-                        }
+                        },
                     ],
                 }),
         ];
@@ -780,85 +802,87 @@ impl InstanceApp {
             });
 
         // Same layout as the cloth: camera only.
-        let sphere_pipeline_layout = context
-            .device()
-            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-                label: Some("Sphere Pipeline Layout"),
-                bind_group_layouts: &[&camera_bind_group_layout],
-                push_constant_ranges: &[],
-            });
+        let sphere_pipeline_layout =
+            context
+                .device()
+                .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some("Sphere Pipeline Layout"),
+                    bind_group_layouts: &[&camera_bind_group_layout],
+                    push_constant_ranges: &[],
+                });
 
         // Sphere render pipeline. Key difference: buffers: &[Vertex::desc()] with
         // NO Instance::desc(), because the sphere is static (no instancing).
-        let sphere_render_pipeline = context
-            .device()
-            .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-                label: Some("Sphere Render Pipeline"),
-                layout: Some(&sphere_pipeline_layout),
-                vertex: wgpu::VertexState {
-                    module: &sphere_shader,
-                    entry_point: "sphere_vs_main",       // Sphere-specific entry point
-                    buffers: &[Vertex::desc()],          // Vertices ONLY, no instances
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                },
-                fragment: Some(wgpu::FragmentState {
-                    module: &sphere_shader,
-                    entry_point: "sphere_fs_main",       // Sphere-specific entry point
-                    targets: &[Some(wgpu::ColorTargetState {
-                        format: context.format(),
-                        blend: Some(wgpu::BlendState::REPLACE),
-                        write_mask: wgpu::ColorWrites::ALL,
-                    })],
-                    compilation_options: wgpu::PipelineCompilationOptions::default(),
-                }),
-                primitive: wgpu::PrimitiveState {
-                    topology: wgpu::PrimitiveTopology::TriangleList,
-                    strip_index_format: None,
-                    front_face: wgpu::FrontFace::Ccw,
-                    cull_mode: Some(wgpu::Face::Back),
-                    polygon_mode: wgpu::PolygonMode::Fill,
-                    unclipped_depth: false,
-                    conservative: false,
-                },
-                depth_stencil: Some(wgpu::DepthStencilState {
-                    format: context.depth_stencil_format(),
-                    depth_write_enabled: true,
-                    depth_compare: wgpu::CompareFunction::Less,
-                    stencil: wgpu::StencilState::default(),
-                    bias: wgpu::DepthBiasState::default(),
-                }),
-                multisample: wgpu::MultisampleState {
-                    count: 1,
-                    mask: !0,
-                    alpha_to_coverage_enabled: false,
-                },
-                multiview: None,
-                cache: None,
-            });
+        let sphere_render_pipeline =
+            context
+                .device()
+                .create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some("Sphere Render Pipeline"),
+                    layout: Some(&sphere_pipeline_layout),
+                    vertex: wgpu::VertexState {
+                        module: &sphere_shader,
+                        entry_point: "sphere_vs_main", // Sphere-specific entry point
+                        buffers: &[Vertex::desc()],    // Vertices ONLY, no instances
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &sphere_shader,
+                        entry_point: "sphere_fs_main", // Sphere-specific entry point
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: context.format(),
+                            blend: Some(wgpu::BlendState::REPLACE),
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                        compilation_options: wgpu::PipelineCompilationOptions::default(),
+                    }),
+                    primitive: wgpu::PrimitiveState {
+                        topology: wgpu::PrimitiveTopology::TriangleList,
+                        strip_index_format: None,
+                        front_face: wgpu::FrontFace::Ccw,
+                        cull_mode: Some(wgpu::Face::Back),
+                        polygon_mode: wgpu::PolygonMode::Fill,
+                        unclipped_depth: false,
+                        conservative: false,
+                    },
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: context.depth_stencil_format(),
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::Less,
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState {
+                        count: 1,
+                        mask: !0,
+                        alpha_to_coverage_enabled: false,
+                    },
+                    multiview: None,
+                    cache: None,
+                });
 
         // === STEP 14: RETURN THE FULLY INITIALIZED STRUCT ===
         //
         // Everything (buffers, pipelines, state) is now ready.
         Self {
             // Cloth buffers
-            vertex_buffer,         // Mini-sphere geometry
-            instance_buffer,       // [2] ping-pong buffers
-            index_buffer,          // Triangle indices
+            vertex_buffer,   // Mini-sphere geometry
+            instance_buffer, // [2] ping-pong buffers
+            index_buffer,    // Triangle indices
 
             // GPU pipelines
-            render_pipeline,       // Cloth rendering
-            compute_pipeline,      // Physics step
+            render_pipeline,  // Cloth rendering
+            compute_pipeline, // Physics step
 
             // Metadata
-            num_indices,           // Indices to draw
-            num_instances,         // Particle count
+            num_indices,   // Indices to draw
+            num_instances, // Particle count
 
             // Camera and timing
-            camera,                // Controllable orbit camera
+            camera,                          // Controllable orbit camera
             last_generation: Instant::now(), // Timing timestamp
 
             // Ping-pong bind groups
-            bind_group,            // [2] alternating bind groups
+            bind_group, // [2] alternating bind groups
 
             // Central sphere
             sphere_index_buffer,
@@ -867,10 +891,10 @@ impl InstanceApp {
             sphere_render_pipeline,
 
             // User settings
-            settings: settings.clone(),        // Currently applied settings
-            pending_settings: settings,        // Settings edited in the UI
-            needs_rebuild: false,              // Rebuild-needed flag
-            paused: false,                     // Pause/play state
+            settings: settings.clone(), // Currently applied settings
+            pending_settings: settings, // Settings edited in the UI
+            needs_rebuild: false,       // Rebuild-needed flag
+            paused: false,              // Pause/play state
         }
     }
 
@@ -910,7 +934,7 @@ impl InstanceApp {
         // Upload the recolored vertices into the existing GPU buffer.
         context.queue().write_buffer(
             &self.vertex_buffer,
-            0,  // Start of the buffer
+            0, // Start of the buffer
             bytemuck::cast_slice(&new_vertices),
         );
 
@@ -938,7 +962,14 @@ impl App for InstanceApp {
         // Control panel: colors, grid size, spacing, etc.
         egui::Window::new("Cloth Settings").show(egui_ctx, |ui| {
             // Pause/play button to stop or resume the simulation.
-            if ui.button(if self.paused { "▶ Resume" } else { "⏸ Pause" }).clicked() {
+            if ui
+                .button(if self.paused {
+                    "▶ Resume"
+                } else {
+                    "⏸ Pause"
+                })
+                .clicked()
+            {
                 self.paused = !self.paused;
             }
             ui.separator();
@@ -966,22 +997,34 @@ impl App for InstanceApp {
             ui.horizontal(|ui| {
                 ui.label("Grid size:");
                 let mut grid_val = self.pending_settings.grid_size as i32;
-                if ui.add(egui::Slider::new(&mut grid_val, 64..=512).step_by(64.0)).changed() {
+                if ui
+                    .add(egui::Slider::new(&mut grid_val, 64..=512).step_by(64.0))
+                    .changed()
+                {
                     self.pending_settings.grid_size = grid_val as u32;
                 }
             });
-            ui.label(format!("  → {} particles", self.pending_settings.grid_size * self.pending_settings.grid_size));
+            ui.label(format!(
+                "  → {} particles",
+                self.pending_settings.grid_size * self.pending_settings.grid_size
+            ));
 
             // Particle spacing slider.
             ui.horizontal(|ui| {
                 ui.label("Spacing:");
-                ui.add(egui::Slider::new(&mut self.pending_settings.spacing, 0.002..=0.02).step_by(0.001));
+                ui.add(
+                    egui::Slider::new(&mut self.pending_settings.spacing, 0.002..=0.02)
+                        .step_by(0.001),
+                );
             });
 
             // Visual particle size slider.
             ui.horizontal(|ui| {
                 ui.label("Point size:");
-                ui.add(egui::Slider::new(&mut self.pending_settings.point_size, 0.001..=0.01).step_by(0.0005));
+                ui.add(
+                    egui::Slider::new(&mut self.pending_settings.point_size, 0.001..=0.01)
+                        .step_by(0.0005),
+                );
             });
 
             ui.separator();
@@ -1018,9 +1061,12 @@ impl App for InstanceApp {
         // time (more steps when rendering is slower than the simulation rate).
         while accumulated_time >= fixed_timestep {
             // Command encoder for the compute pass.
-            let mut encoder = context.device().create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Compute Encoder"),
-            });
+            let mut encoder =
+                context
+                    .device()
+                    .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                        label: Some("Compute Encoder"),
+                    });
 
             {
                 // Begin a compute pass to run the physics kernel.
@@ -1066,7 +1112,10 @@ impl App for InstanceApp {
         // 3. Draw the central obstacle sphere.
         render_pass.set_pipeline(&self.sphere_render_pipeline);
         render_pass.set_vertex_buffer(0, self.sphere_vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.sphere_index_buffer.slice(..), wgpu::IndexFormat::Uint32);
+        render_pass.set_index_buffer(
+            self.sphere_index_buffer.slice(..),
+            wgpu::IndexFormat::Uint32,
+        );
         render_pass.draw_indexed(0..self.num_sphere_indices, 0, 0..1);
     }
 }
@@ -1109,8 +1158,14 @@ mod tests {
         // The hand-written byte offsets in Vertex::desc() must match the actual
         // struct offsets, otherwise the GPU reads attributes from wrong locations.
         let desc = Vertex::desc();
-        assert_eq!(desc.array_stride, size_of::<Vertex>() as wgpu::BufferAddress);
-        assert_eq!(desc.attributes[0].offset, offset_of!(Vertex, position) as u64);
+        assert_eq!(
+            desc.array_stride,
+            size_of::<Vertex>() as wgpu::BufferAddress
+        );
+        assert_eq!(
+            desc.attributes[0].offset,
+            offset_of!(Vertex, position) as u64
+        );
         assert_eq!(desc.attributes[1].offset, offset_of!(Vertex, normal) as u64);
         assert_eq!(desc.attributes[2].offset, offset_of!(Vertex, color) as u64);
     }
@@ -1121,10 +1176,18 @@ mod tests {
         // 16-byte aligned, 16-byte size). On the CPU they are [f32; 4]. So the
         // struct is 32 bytes with speed at offset 16. The vec4 (with padding w)
         // is what keeps the CPU and GPU layouts in agreement.
-        assert_eq!(size_of::<Instance>(), 32, "Instance must be 2 x vec4 = 32 bytes");
+        assert_eq!(
+            size_of::<Instance>(),
+            32,
+            "Instance must be 2 x vec4 = 32 bytes"
+        );
         assert_eq!(align_of::<Instance>(), 4);
         assert_eq!(offset_of!(Instance, position), 0);
-        assert_eq!(offset_of!(Instance, speed), 16, "speed must start at offset 16 (vec4 alignment)");
+        assert_eq!(
+            offset_of!(Instance, speed),
+            16,
+            "speed must start at offset 16 (vec4 alignment)"
+        );
     }
 
     #[test]
@@ -1135,7 +1198,10 @@ mod tests {
         // two speed floats. The render shader ignores @location(4), so this only
         // needs the stride to match; we still pin the documented offsets.
         let desc = Instance::desc();
-        assert_eq!(desc.array_stride, size_of::<Instance>() as wgpu::BufferAddress);
+        assert_eq!(
+            desc.array_stride,
+            size_of::<Instance>() as wgpu::BufferAddress
+        );
         assert_eq!(desc.attributes[0].offset, 0);
         assert_eq!(desc.attributes[1].offset, size_of::<[f32; 3]>() as u64);
     }
@@ -1226,9 +1292,18 @@ mod tests {
                 let i = (row * cols + col) as usize;
                 let expected_x = (col as f32 - cols as f32 / 2.0) * spacing;
                 let expected_z = (row as f32 - rows as f32 / 2.0) * spacing;
-                assert!((instances[i].position[0] - expected_x).abs() < 1e-9, "x at ({row},{col})");
-                assert_eq!(instances[i].position[1], displacement, "y (height) at ({row},{col})");
-                assert!((instances[i].position[2] - expected_z).abs() < 1e-9, "z at ({row},{col})");
+                assert!(
+                    (instances[i].position[0] - expected_x).abs() < 1e-9,
+                    "x at ({row},{col})"
+                );
+                assert_eq!(
+                    instances[i].position[1], displacement,
+                    "y (height) at ({row},{col})"
+                );
+                assert!(
+                    (instances[i].position[2] - expected_z).abs() < 1e-9,
+                    "z at ({row},{col})"
+                );
             }
         }
     }
@@ -1257,8 +1332,14 @@ mod tests {
 
         // Cell (row=rows/2, col=cols/2) is the one placed on the origin axes.
         let center_idx = ((rows / 2) * cols + (cols / 2)) as usize;
-        assert_eq!(instances[center_idx].position[0], 0.0, "col=cols/2 lies on X=0");
-        assert_eq!(instances[center_idx].position[2], 0.0, "row=rows/2 lies on Z=0");
+        assert_eq!(
+            instances[center_idx].position[0], 0.0,
+            "col=cols/2 lies on X=0"
+        );
+        assert_eq!(
+            instances[center_idx].position[2], 0.0,
+            "row=rows/2 lies on Z=0"
+        );
 
         // Extent along X spans (cols - 1) * spacing from first to last column.
         let first_x = instances[0].position[0];

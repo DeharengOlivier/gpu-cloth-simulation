@@ -1,8 +1,23 @@
 [package]
-name= "SimulationTissu"
-version= "0.1.0"
-edition= "2021"
+name = "gpu-cloth-simulation"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+description = "Real-time mass-spring cloth simulation whose physics runs entirely in a WGSL compute shader."
+license = "MIT"
+repository = "https://github.com/DeharengOlivier/gpu-cloth-simulation"
+
+[[bin]]
+name = "gpu-cloth-simulation"
+path = "src/main.rs"
 
 [dependencies]
-wgpu-bootstrap= {git = "https://github.com/qlurkin/wgpu-bootstrap", tag = "v0.4.2"}
-bytemuck= {version= "1.18", features= ["derive"]}
+wgpu-bootstrap = { git = "https://github.com/qlurkin/wgpu-bootstrap", tag = "v0.4.2" }
+bytemuck = { version = "1.18", features = ["derive"] }
+
+[dev-dependencies]
+# The headless harness talks to wgpu directly, with no window and no surface.
+# Pinned to the version wgpu-bootstrap already resolves, so there is one copy of
+# the API in the build, not two.
+wgpu = "22.1"
+pollster = "0.3"

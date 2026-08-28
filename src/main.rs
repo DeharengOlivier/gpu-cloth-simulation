@@ -19,22 +19,16 @@ fn main() {
 
     let mut runner = Runner::new(
         "GPU Cloth Simulation",
-
         // Initial window width in pixels.
         900,
-
         // Initial window height in pixels.
         700,
-
         // egui background color (light grey). Affects the UI only, not the 3D scene.
         egui::Color32::from_rgb(245, 245, 245),
-
         // MSAA sample count (anti-aliasing). Higher = smoother edges but more cost.
         32,
-
         // Present mode (0 = VSync, 1 = immediate). VSync caps to the display refresh rate.
         0,
-
         // App factory closure: the Runner calls it once at startup with the GPU
         // Context (device, queue, surface format) and stores the resulting app in
         // an Arc (thread-safe shared pointer).
