@@ -18,9 +18,18 @@ useful than a checklist of controls that do not apply.
   frame may run, and the grid side and spacing are bounded by the panel. A way
   around either is a real defect.
 - Anything in the dependency tree with a known advisory. `cargo audit` runs in
-  CI on every push through `rustsec/audit-check`, and Dependabot opens pull
-  requests for updates, so this should surface on its own. If it does not,
-  please say so.
+  CI on every push and Dependabot opens pull requests for updates, so this
+  should surface on its own. If it does not, please say so.
+
+  Two exceptions are recorded rather than fixed. `.cargo/audit.toml` skips two
+  quick-xml denial-of-service advisories, with the reasoning written next to
+  them: both need attacker-controlled XML, this program parses none, and both
+  arrive on Linux only through a build-time proc-macro and the local
+  accessibility bus. Separately, the unmaintained and unsound warnings
+  (cgmath, paste, ttf-parser, event-listener, memmap2, rand) are printed by
+  the audit job but do not fail it: all of them arrive through
+  `wgpu-bootstrap`, which is pinned to a tag on a third-party repository, so
+  none can be resolved from here. They will go when that dependency moves.
 - Undefined behaviour. The crate has no `unsafe` block of its own; `bytemuck`
   derives the casts, which is why the CPU and GPU struct layouts are pinned by
   tests rather than trusted.

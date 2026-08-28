@@ -89,6 +89,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: rustsec/audit-check@v2
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+      # cargo-audit is run directly rather than through rustsec/audit-check,
+      # which posts its findings as a check run and so needs `checks: write`.
+      # This workflow grants read-only access on purpose, and the job output is
+      # just as readable. Running it directly also means the ignore list in
+      # .cargo/audit.toml applies, with the reasoning written next to it.
+      - uses: taiki-e/install-action@cargo-audit
+      - name: Advisories
+        # Fails on vulnerabilities. The unmaintained and unsound warnings are
+        # printed but do not gate: every one of them arrives through the pinned
+        # wgpu-bootstrap tree and none can be resolved from this repository. See
+        # SECURITY.md.
+        run: cargo audit
