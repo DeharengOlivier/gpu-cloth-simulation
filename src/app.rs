@@ -104,6 +104,18 @@ pub struct ClothSettings {
     pub cloth_color: [f32; 3],
     /// Obstacle sphere RGB colour.
     pub sphere_color: [f32; 3],
+    /// Structural spring stiffness, applied live.
+    pub structural_k: f32,
+    /// Shear spring stiffness, applied live.
+    pub shear_k: f32,
+    /// Bend spring stiffness, applied live.
+    pub bend_k: f32,
+    /// Damping, applied live. Damps each spring and drives the air drag.
+    pub damping: f32,
+    /// Particle mass, applied live.
+    pub mass: f32,
+    /// Friction against the obstacle sphere, applied live.
+    pub friction: f32,
 }
 
 impl Default for ClothSettings {
@@ -114,6 +126,12 @@ impl Default for ClothSettings {
             point_size: 0.0033,           // Visualisation sphere radius
             cloth_color: [1.0, 0.0, 0.0], // Red
             sphere_color: [0.5, 0.5, 0.5],
+            structural_k: ClothConfig::default().structural_k,
+            shear_k: ClothConfig::default().shear_k,
+            bend_k: ClothConfig::default().bend_k,
+            damping: ClothConfig::default().damping,
+            mass: ClothConfig::default().mass,
+            friction: ClothConfig::default().friction,
         }
     }
 }
@@ -124,6 +142,12 @@ impl ClothSettings {
         ClothConfig {
             grid_size: self.grid_size,
             spacing: self.spacing,
+            structural_k: self.structural_k,
+            shear_k: self.shear_k,
+            bend_k: self.bend_k,
+            damping: self.damping,
+            mass: self.mass,
+            friction: self.friction,
             ..ClothConfig::default()
         }
     }
@@ -445,7 +469,44 @@ impl App for InstanceApp {
             }
 
             ui.separator();
-            ui.label("Settings (restart required):");
+            ui.label("Physics (applied immediately):");
+
+            // These are uniforms, so they are rewritten between steps and the
+            // draped sheet carries on rather than being dropped and re-fallen.
+            let mut retuned = false;
+            for (label, value, range) in [
+                (
+                    "Structural",
+                    &mut self.settings.structural_k,
+                    100.0..=20000.0,
+                ),
+                ("Shear", &mut self.settings.shear_k, 100.0..=20000.0),
+                ("Bend", &mut self.settings.bend_k, 0.0..=5000.0),
+            ] {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{label} stiffness:"));
+                    retuned |= ui
+                        .add(egui::Slider::new(value, range).logarithmic(true))
+                        .changed();
+                });
+            }
+            for (label, value, range) in [
+                ("Damping", &mut self.settings.damping, 0.0..=2.0),
+                ("Mass", &mut self.settings.mass, 0.01..=1.0),
+                ("Friction", &mut self.settings.friction, 0.0..=1.0),
+            ] {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{label}:"));
+                    retuned |= ui.add(egui::Slider::new(value, range)).changed();
+                });
+            }
+            if retuned {
+                self.simulation
+                    .retune(context.queue(), &self.settings.to_config());
+            }
+
+            ui.separator();
+            ui.label("Shape (restart required):");
 
             ui.horizontal(|ui| {
                 ui.label("Grid size:");
@@ -641,5 +702,56 @@ mod tests {
         assert_eq!(config.grid_size, settings.grid_size);
         assert_eq!(config.spacing, settings.spacing);
         assert_eq!(config.sphere_radius, ClothConfig::default().sphere_radius);
+    }
+
+    #[test]
+    fn every_physics_setting_the_panel_edits_reaches_the_configuration() {
+        // A slider bound to a field that to_config drops would move and do
+        // nothing, which is what the friction uniform used to do in the shader.
+        let settings = ClothSettings {
+            structural_k: 1234.0,
+            shear_k: 567.0,
+            bend_k: 89.0,
+            damping: 0.42,
+            mass: 0.25,
+            friction: 0.33,
+            ..ClothSettings::default()
+        };
+        let config = settings.to_config();
+        assert_eq!(config.structural_k, settings.structural_k);
+        assert_eq!(config.shear_k, settings.shear_k);
+        assert_eq!(config.bend_k, settings.bend_k);
+        assert_eq!(config.damping, settings.damping);
+        assert_eq!(config.mass, settings.mass);
+        assert_eq!(config.friction, settings.friction);
+    }
+
+    #[test]
+    fn every_position_the_physics_sliders_allow_is_a_valid_configuration() {
+        // The ranges written into the panel and the bounds validate enforces
+        // are two statements of the same thing, in two files.
+        let ends = [
+            (100.0f32, 20000.0f32), // structural
+            (100.0, 20000.0),       // shear
+            (0.0, 5000.0),          // bend
+        ];
+        let mut settings = ClothSettings::default();
+        for (low, high) in ends {
+            for value in [low, high] {
+                settings.structural_k = value.max(1.0);
+                settings.shear_k = value.max(1.0);
+                settings.bend_k = value;
+                assert!(settings.to_config().validate().is_ok());
+            }
+        }
+        for (damping, mass, friction) in [(0.0, 0.01, 0.0), (2.0, 1.0, 1.0)] {
+            settings.damping = damping;
+            settings.mass = mass;
+            settings.friction = friction;
+            assert!(
+                settings.to_config().validate().is_ok(),
+                "damping {damping}, mass {mass}, friction {friction} is rejected"
+            );
+        }
     }
 }

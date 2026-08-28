@@ -163,6 +163,20 @@ pub struct ClothConfig {
     /// 0 is frictionless, 1 lets friction cancel a tangential force as large as
     /// the normal one.
     pub friction: f32,
+    /// Stiffness of the springs to the four direct neighbours.
+    pub structural_k: f32,
+    /// Stiffness of the springs to the four diagonal neighbours.
+    pub shear_k: f32,
+    /// Stiffness of the springs reaching two cells out, which resist folding.
+    pub bend_k: f32,
+    /// Damping coefficient.
+    ///
+    /// It plays two roles the shader keeps separate but this field does not: it
+    /// damps the relative velocity along each spring, and it is the coefficient
+    /// of the global air drag. Raising it slows both.
+    pub damping: f32,
+    /// Mass of a single particle.
+    pub mass: f32,
 }
 
 impl Default for ClothConfig {
@@ -175,6 +189,11 @@ impl Default for ClothConfig {
             constraint_iterations: CONSTRAINT_ITERATIONS,
             max_spring_stretch: MAX_SPRING_STRETCH,
             friction: DEFAULT_FRICTION,
+            structural_k: 6000.0,
+            shear_k: 3000.0,
+            bend_k: 450.0,
+            damping: 0.1,
+            mass: 0.1,
         }
     }
 }
@@ -223,6 +242,24 @@ impl ClothConfig {
         if !(0.0..=1.0).contains(&self.friction) {
             return fail("friction", "be within 0 and 1");
         }
+        for (setting, stiffness) in [
+            ("structural_k", self.structural_k),
+            ("shear_k", self.shear_k),
+            ("bend_k", self.bend_k),
+        ] {
+            if !stiffness.is_finite() || stiffness < 0.0 {
+                return fail(setting, "be finite and not negative");
+            }
+        }
+        if !self.damping.is_finite() || self.damping < 0.0 {
+            return fail("damping", "be finite and not negative");
+        }
+        if !self.mass.is_finite() || self.mass <= 0.0 {
+            return fail(
+                "mass",
+                "be finite and strictly positive, since it divides the force",
+            );
+        }
         if self.constraint_iterations > MAX_CONSTRAINT_ITERATIONS {
             return fail(
                 "constraint_iterations",
@@ -239,11 +276,11 @@ impl ClothConfig {
     /// relaxed rather than pre-stretched.
     pub fn physics(&self) -> PhysicsParams {
         PhysicsParams {
-            structural_k: 6000.0,
-            shear_k: 3000.0,
-            bend_k: 450.0,
-            damping: 0.1,
-            mass: 0.1,
+            structural_k: self.structural_k,
+            shear_k: self.shear_k,
+            bend_k: self.bend_k,
+            damping: self.damping,
+            mass: self.mass,
             rest_length: self.spacing,
             dt: FIXED_TIME_STEP_SECONDS,
             friction: self.friction,
@@ -293,6 +330,7 @@ pub struct ClothSimulation {
     particle_count: u32,
     workgroups: u32,
     constraint_iterations: u32,
+    physics_buffer: wgpu::Buffer,
 }
 
 impl ClothSimulation {
@@ -403,6 +441,7 @@ impl ClothSimulation {
             particle_count,
             workgroups: particle_count.div_ceil(WORKGROUP_SIZE),
             constraint_iterations: config.constraint_iterations,
+            physics_buffer,
         }
     }
 
@@ -452,6 +491,34 @@ impl ClothSimulation {
 
         self.buffers.swap(0, 1);
         self.bind_groups.swap(0, 1);
+    }
+
+    /// Replaces the physics parameters without disturbing the cloth.
+    ///
+    /// They are a uniform, so rewriting the buffer is enough: the particles keep
+    /// their positions and velocities and the next step uses the new values.
+    /// This is what lets the interface retune a draped sheet rather than
+    /// rebuilding it and watching it fall again.
+    ///
+    /// The grid size and spacing in `config` are ignored, since changing either
+    /// means a different set of particles. Rebuild for those.
+    ///
+    /// # Panics
+    ///
+    /// If the configuration does not pass [`ClothConfig::validate`].
+    ///
+    /// Complexity: O(1), one write of a single uniform.
+    pub fn retune(&self, queue: &wgpu::Queue, config: &ClothConfig) {
+        if let Err(problem) = config.validate() {
+            panic!("cannot retune this cloth: {problem}");
+        }
+        let mut physics = config.physics();
+        // Both describe the particle set rather than the forces on it, so they
+        // stay as built: honouring them here would mean reading a grid that no
+        // longer matches the buffer.
+        physics.grid_size = self.grid_size;
+        physics.rest_length = config.spacing;
+        queue.write_buffer(&self.physics_buffer, 0, bytemuck::cast_slice(&[physics]));
     }
 
     /// The buffer holding the most recently computed state, for rendering.
@@ -770,6 +837,55 @@ mod tests {
             assert!(
                 config.validate().is_err(),
                 "friction {friction} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn a_mass_that_cannot_divide_a_force_is_rejected() {
+        // The shader divides the accumulated force by the mass, so zero is an
+        // infinity in every component before the first position update.
+        for mass in [0.0, -0.1, f32::NAN, f32::INFINITY] {
+            let config = ClothConfig { mass, ..valid() };
+            assert!(config.validate().is_err(), "mass {mass} must be rejected");
+        }
+    }
+
+    #[test]
+    fn a_negative_stiffness_is_rejected() {
+        // A negative spring pushes its endpoints apart in proportion to how far
+        // apart they already are, which diverges by construction.
+        for stiffness in [-1.0, f32::NAN] {
+            for config in [
+                ClothConfig {
+                    structural_k: stiffness,
+                    ..valid()
+                },
+                ClothConfig {
+                    shear_k: stiffness,
+                    ..valid()
+                },
+                ClothConfig {
+                    bend_k: stiffness,
+                    ..valid()
+                },
+            ] {
+                assert!(
+                    config.validate().is_err(),
+                    "stiffness {stiffness} must be rejected"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_negative_damping_is_rejected() {
+        // Negative damping is an amplifier: the drag term adds energy every step.
+        for damping in [-0.1, f32::NAN] {
+            let config = ClothConfig { damping, ..valid() };
+            assert!(
+                config.validate().is_err(),
+                "damping {damping} must be rejected"
             );
         }
     }

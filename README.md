@@ -93,15 +93,16 @@ Use `--release`. A debug build runs the simulation far below real time.
 ## Controls
 
 - **Camera**: drag to orbit, scroll to zoom.
-- **Panel**: pause and resume, pick the cloth and sphere colours, and set the
-  grid side (64 to 512), the spacing between particles and the drawn point size.
-  Those three need a restart, which the panel offers once something has changed.
-  It also reports the particle count, the steps the last frame ran against the
-  10.4 real time asks for, and a warning once the machine has fallen behind.
+- **Panel, applied immediately**: pause and resume, the cloth and sphere
+  colours, the three spring stiffnesses, the damping, the particle mass and the
+  friction. These are uniforms, so they are rewritten between steps and a draped
+  sheet carries on rather than being dropped and re-fallen.
+- **Panel, needing a restart**: the grid side (64 to 512), the spacing between
+  particles and the drawn point size, since each changes the set of particles.
+  The panel offers the restart once one of them has moved.
 
-The stiffness, damping, mass, friction and sphere radius are part of
-`ClothConfig` and reach the shader as uniforms, but the panel does not expose
-them yet.
+It also reports the particle count, the steps the last frame ran against the
+10.4 real time asks for, and a warning once the machine has fallen behind.
 
 ## Performance
 
@@ -171,8 +172,9 @@ one.
 - **The workgroup size is fixed at 256 and untuned.** The best value is
   hardware-dependent, and a 2D workgroup would map more naturally onto a 2D
   grid. The benchmark above is the place to settle that with numbers.
-- **The panel exposes a subset of the parameters.** Stiffness, damping, mass,
-  friction and the sphere radius are configurable in code but not in the UI.
+- **The sphere radius is not in the panel.** Every other physics parameter is;
+  this one changes the obstacle mesh as well as the uniform, so it needs the
+  restart path rather than the live one.
 - **The constraint is Jacobi, not Gauss-Seidel.** Each invocation applies half
   of each spring's excess against neighbours that move in the same pass, so a
   fixed iteration count leaves a residue: 1.59x against a 1.5x cap at the

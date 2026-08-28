@@ -327,6 +327,55 @@ fn a_grid_that_does_not_fill_its_workgroups_still_simulates() {
 }
 
 #[test]
+fn retuning_the_physics_takes_effect_without_a_restart() {
+    // The stiffness, damping, mass and friction are uniforms, so they can be
+    // rewritten between steps rather than only at build time. They used to be
+    // reachable only by rebuilding the whole simulation, which throws the cloth
+    // away and starts it falling again, so tuning them meant losing the drape.
+    let Some(gpu) = harness::gpu_or_skip("retuning_the_physics_takes_effect_without_a_restart")
+    else {
+        return;
+    };
+    let config = harness::small_config();
+    let mut simulation = ClothSimulation::new(&gpu.device, &config);
+    for _ in 0..600 {
+        simulation.step(&gpu.device, &gpu.queue);
+    }
+    let before_retune = simulation.read_particles(&gpu.device, &gpu.queue);
+
+    // A tenth of the stiffness is a different cloth, and nothing else changes.
+    let softer = ClothConfig {
+        structural_k: config.structural_k / 10.0,
+        shear_k: config.shear_k / 10.0,
+        bend_k: config.bend_k / 10.0,
+        ..config
+    };
+    simulation.retune(&gpu.queue, &softer);
+    for _ in 0..600 {
+        simulation.step(&gpu.device, &gpu.queue);
+    }
+    let retuned = simulation.read_particles(&gpu.device, &gpu.queue);
+
+    // The cloth was not restarted: it carried on from the state it was in.
+    assert_eq!(retuned.len(), before_retune.len());
+
+    let mut untouched = ClothSimulation::new(&gpu.device, &config);
+    for _ in 0..1_200 {
+        untouched.step(&gpu.device, &gpu.queue);
+    }
+    let unchanged = untouched.read_particles(&gpu.device, &gpu.queue);
+
+    assert!(
+        retuned
+            .iter()
+            .zip(&unchanged)
+            .any(|(a, b)| a.position != b.position),
+        "softening every spring by a factor of ten changed nothing: the new \
+         parameters never reached the GPU"
+    );
+}
+
+#[test]
 fn the_friction_coefficient_reaches_the_shader() {
     // repaired: PhysicsParams carried a `friction` field, uploaded on every
     // build, that the shader never read. The collision code used a local
