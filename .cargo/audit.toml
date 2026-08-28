@@ -1,0 +1,29 @@
+# Advisories cargo-audit is told to skip, each with the reason and the condition
+# that removes it. Nothing goes in this list to make a build green: it goes in
+# because the advisory has been read and does not reach this program.
+
+[advisories]
+ignore = [
+    # Two denial-of-service advisories against quick-xml, both requiring the
+    # attacker to control the XML being parsed. This program parses no XML.
+    #
+    # It arrives twice, on Linux only, and neither path is reachable at runtime
+    # from anything a user or an attacker supplies:
+    #
+    #   quick-xml 0.36 <- wayland-scanner, a build-time proc-macro that
+    #     generates code from the protocol descriptions shipped inside the
+    #     crate. It does not run in the built binary at all.
+    #
+    #   quick-xml 0.30 <- zbus_xml <- atspi <- accesskit_unix, which reads
+    #     D-Bus introspection XML from the local accessibility bus, a trusted
+    #     local service rather than remote input.
+    #
+    # The fix is quick-xml >= 0.41, which needs winit, accesskit and eframe to
+    # move first. All three arrive through wgpu-bootstrap, pinned to tag v0.4.2
+    # against a third-party repository, so this cannot be resolved from here.
+    #
+    # Remove these two the moment wgpu-bootstrap ships a release built on a
+    # newer eframe, and drop them entirely if the project stops depending on it.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]
