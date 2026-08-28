@@ -14,6 +14,8 @@ use wgpu_bootstrap::{
     App, Context,
 };
 
+use crate::timestep::FixedTimestep;
+
 use crate::simulation::{
     resolve_grid_size, ClothConfig, ClothSimulation, Instance, FIXED_TIME_STEP_SECONDS,
 };
@@ -152,6 +154,9 @@ pub struct InstanceApp {
     settings: ClothSettings,
     pending_settings: ClothSettings,
     paused: bool,
+
+    /// Carries the fraction of a step left over by each frame into the next.
+    clock: FixedTimestep,
 }
 
 /// Builds the small sphere drawn once per cloth particle.
@@ -353,6 +358,7 @@ impl InstanceApp {
             settings: settings.clone(),
             pending_settings: settings,
             paused: false,
+            clock: FixedTimestep::default(),
         }
     }
 
@@ -497,11 +503,11 @@ impl App for InstanceApp {
         }
 
         // Run as many fixed steps as the elapsed frame time paid for, so the
-        // simulation advances at the same rate whatever the frame rate.
-        let mut accumulated_time = delta_time;
-        while accumulated_time >= FIXED_TIME_STEP_SECONDS {
+        // simulation advances at the same rate whatever the frame rate. The
+        // clock keeps the remainder and caps the catch-up; see `timestep`.
+        let steps = self.clock.steps_for(delta_time, FIXED_TIME_STEP_SECONDS);
+        for _ in 0..steps {
             self.simulation.step(context.device(), context.queue());
-            accumulated_time -= FIXED_TIME_STEP_SECONDS;
         }
     }
 

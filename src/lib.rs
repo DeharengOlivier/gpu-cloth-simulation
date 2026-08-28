@@ -12,6 +12,7 @@
 
 pub mod app;
 pub mod simulation;
+pub mod timestep;
 
 /// The wgpu the whole crate is built against, re-exported so callers and tests
 /// use exactly this one rather than a second copy resolved on their own.
