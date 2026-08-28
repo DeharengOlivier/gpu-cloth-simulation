@@ -6,12 +6,6 @@ struct Instance {
     speed: vec4<f32>,
 };
 
-// Time uniform. Declared to match the bind group layout (binding 2) but not
-// read by the current simulation step.
-struct TimeUniform {
-    generation_duration: f32,
-};
-
 // Simulation parameters shared by every invocation. Field ORDER must match the
 // host-side PhysicsParams struct, because the host/GPU mapping is by byte
 // offset, not by name (bytemuck, #[repr(C)]).
@@ -32,8 +26,7 @@ struct PhysicsParams {
 // after every step, so this frame's output becomes next frame's input).
 @group(0) @binding(0) var<storage, read_write> instances_ping: array<Instance>;
 @group(0) @binding(1) var<storage, read_write> instances_pong: array<Instance>;
-@group(0) @binding(2) var<uniform> time: TimeUniform;
-@group(0) @binding(3) var<uniform> physics: PhysicsParams;
+@group(0) @binding(2) var<uniform> physics: PhysicsParams;
 
 
 
