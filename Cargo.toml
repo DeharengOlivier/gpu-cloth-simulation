@@ -23,4 +23,4 @@ pollster = "0.3"
 # The test harness talks to wgpu directly, with no window and no surface. Pinned
 # to the version wgpu-bootstrap already resolves, so there is one copy of the API
 # in the build, not two.
-wgpu = "22.1"
+wgpu = "23.0"
