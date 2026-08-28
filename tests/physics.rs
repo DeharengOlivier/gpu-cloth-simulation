@@ -297,6 +297,14 @@ fn the_friction_coefficient_reaches_the_shader() {
     );
 }
 
+// The two tests below need the heaviest configuration the interface offers,
+// 262,144 particles run for thousands of steps: that is the only place the sheet
+// stretches far enough to exercise the cap at all. On a real GPU it is seconds.
+// On the software rasteriser a CI runner has, it would be the whole build. So
+// they are ignored by default, run nightly, and run on demand with:
+//
+//     cargo test --test physics -- --ignored
+
 /// The tightest spacing and the largest grid the UI offers, which together load
 /// the springs hardest and are where every stability problem showed up first.
 fn heaviest_supported_config() -> ClothConfig {
@@ -308,6 +316,7 @@ fn heaviest_supported_config() -> ClothConfig {
 }
 
 #[test]
+#[ignore = "262,144 particles for 12,000 steps: see the note above"]
 fn a_settled_sheet_never_reaches_the_stretch_cap() {
     // The cap is a safety net, not a physics knob. A sheet hanging at rest must
     // stay under it, or the constraint fires on every step forever: it is then
@@ -335,6 +344,7 @@ fn a_settled_sheet_never_reaches_the_stretch_cap() {
 }
 
 #[test]
+#[ignore = "262,144 particles for 10,000 steps: see the note above"]
 fn the_stretch_cap_clips_the_transient() {
     // The mechanism tested in the conditions it exists for. As the falling sheet
     // snaps taut on the sphere it reaches 3.04x its rest length unconstrained,

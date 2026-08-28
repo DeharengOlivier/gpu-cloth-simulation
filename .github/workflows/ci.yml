@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    # Nightly, for the physics tests too slow to run on every push.
+    - cron: "0 3 * * *"
 
 # A second push to the same branch cancels the run it supersedes.
 concurrency:
@@ -38,6 +41,48 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: CPU tests
         run: cargo test --lib --bins
+
+  physics:
+    name: Physics on a software adapter
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: System dependencies, including Mesa's software rasteriser
+        # lavapipe is a Vulkan implementation that runs on the CPU, so the
+        # compute shader is executed for real on a runner with no GPU. Without
+        # it every physics test would skip and the suite would be green while
+        # asserting nothing.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxkbcommon-dev \
+                                  mesa-vulkan-drivers vulkan-tools
+      - name: Show the adapter
+        run: vulkaninfo --summary || true
+      - name: Physics tests
+        # CI is set by GitHub, and one test asserts an adapter is present when
+        # it is, so "no adapter" can never quietly mean "physics untested".
+        run: cargo test --test physics
+
+  heavy-physics:
+    name: Physics at the largest supported grid
+    # The two ignored tests need 262,144 particles for thousands of steps, which
+    # is minutes of software rasterising. Nightly rather than on every push.
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: System dependencies, including Mesa's software rasteriser
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxkbcommon-dev \
+                                  mesa-vulkan-drivers vulkan-tools
+      - name: The heavy physics tests
+        run: cargo test --test physics -- --ignored
 
   audit:
     name: Dependency advisories
