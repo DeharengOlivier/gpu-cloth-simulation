@@ -409,10 +409,12 @@ fn the_friction_coefficient_reaches_the_shader() {
 }
 
 // The two tests below need the heaviest configuration the interface offers,
-// 262,144 particles run for thousands of steps: that is the only place the sheet
-// stretches far enough to exercise the cap at all. On a real GPU it is seconds.
-// On the software rasteriser a CI runner has, it would be the whole build. So
-// they are ignored by default, run nightly, and run on demand with:
+// 262,144 particles run for thousands of steps, and nothing smaller stands in
+// for either: one makes a claim about the whole supported range, and the other
+// needs an overshoot only a large sheet produces (the comment on it records the
+// cheaper configurations that were measured and rejected). On a real GPU they
+// are seconds. On the software rasteriser a CI runner has, they would be the
+// whole build. So they are ignored by default, run nightly, and run on demand:
 //
 //     cargo test --test physics -- --ignored
 
@@ -455,12 +457,26 @@ fn a_settled_sheet_never_reaches_the_stretch_cap() {
 }
 
 #[test]
-#[ignore = "262,144 particles for 10,000 steps: see the note above"]
+#[ignore = "262,144 particles for 6,000 steps: see the note above"]
 fn the_stretch_cap_clips_the_transient() {
     // The mechanism tested in the conditions it exists for. As the falling sheet
     // snaps taut on the sphere it reaches 3.04x its rest length unconstrained,
     // which is not cloth. The constraint has to bring that down, and this
     // compares the two runs rather than trusting the cap to be respected.
+    //
+    // Cheaper stand-ins were measured and none works, so this stays expensive:
+    //
+    //   - softening the springs raises the transient (2.8x at a twentieth of the
+    //     stiffness with twice the mass) but raises the resting stretch with it,
+    //     past the cap, which is the one configuration the constraint cannot
+    //     hold and the run goes non-finite;
+    //   - lowering the damping raises the transient without touching the resting
+    //     stretch, but only to 1.40x, nowhere near the cap;
+    //   - the same spacing on a 256 grid reaches 1.52x.
+    //
+    // The overshoot here comes from the momentum of a large sheet arriving at
+    // once while the stiffness keeps the resting stretch low. Nothing smaller
+    // reproduces that.
     let Some(gpu) = harness::gpu_or_skip("the_stretch_cap_clips_the_transient") else {
         return;
     };
@@ -474,7 +490,7 @@ fn the_stretch_cap_clips_the_transient() {
         let mut simulation = ClothSimulation::new(&gpu.device, &config);
         let side = simulation.grid_size() as usize;
         let mut peak = 0.0f32;
-        for _ in 0..100 {
+        for _ in 0..120 {
             for _ in 0..50 {
                 simulation.step(&gpu.device, &gpu.queue);
             }
